@@ -9,14 +9,13 @@ set(EXPLICIT_PYTHON_VERSION 3.13.1)
 add_subdirectory(libs/pyunrealsdk)
 
 add_subdirectory(libs/pluginloader EXCLUDE_FROM_ALL)
-set_target_properties(pluginloader_no_proxy PROPERTIES
+set_target_properties(pluginloader_dsound PROPERTIES
     EXCLUDE_FROM_ALL false
-    OUTPUT_NAME ddraw
 )
 
 install(
     TARGETS
-        pluginloader_no_proxy
+        pluginloader_dsound
     RUNTIME DESTINATION
         .exe_folder
 )
