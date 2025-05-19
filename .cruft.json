@@ -1,0 +1,22 @@
+{
+  "template": "git@github.com:bl-sdk/common_dotfiles.git",
+  "commit": "597ec422d3b5692927f325b9b5c2ae42288e8cc5",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "_jinja2_env_vars": {
+        "lstrip_blocks": true,
+        "trim_blocks": true
+      },
+      "_extensions": [
+        "cookiecutter.extensions.SlugifyExtension"
+      ],
+      "project_name": "willow1-mod-manager",
+      "__project_slug": "willow1_mod_manager",
+      "include_cpp": true,
+      "include_py": true,
+      "_template": "git@github.com:bl-sdk/common_dotfiles.git"
+    }
+  },
+  "directory": null
+}
