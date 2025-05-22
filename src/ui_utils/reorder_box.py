@@ -159,7 +159,7 @@ class ReorderBox(OptionBox):
         event: EInputEvent,
     ) -> Block | type[Block] | None:
         current_index = self.buttons.index(self.get_selected_button())
-        new_index: int = current_index
+        new_index: int
 
         match key, event:
             case "Up" | "Gamepad_LeftStick_Up", EInputEvent.IE_Pressed:

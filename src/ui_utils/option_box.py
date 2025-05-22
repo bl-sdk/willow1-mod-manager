@@ -36,14 +36,13 @@ class OptionBoxButton:
 @dataclass
 class OptionBox:
     """
-    Handles displaying an option box, like those used to confirm playthrough.
+    Handles displaying an option box, like those used when save quitting.
 
     Attributes:
         title: The title text to display at the top of the option box.
         message: The message to display in the main body of the option box.
         tooltip: The tooltip text to display in the footer of the option box.
         buttons: The buttons which the user may pick from.
-
 
     Callbacks:
         on_select: Run when a button in the option box is selected. Passed the option box and the
@@ -84,7 +83,7 @@ class OptionBox:
 
     _gfx_object: WeakPointer = field(init=False, repr=False, default=WeakPointer())
 
-    _pages: list[Page] = field(init=False, repr=False, default_factory=list)
+    _pages: list[Page] = field(init=False, repr=False, default_factory=list["Page"])
     _current_page_idx: int = field(init=False, repr=False, default=0)
 
     # While we don't display previous page, defining one for use in subclasses
@@ -164,7 +163,7 @@ class OptionBox:
             self._pages = [Page(buttons=self.buttons, **kwargs)]
         else:
             self._pages = [
-                Page(buttons=[*self.buttons[i: i + 3], self._next_page], **kwargs)
+                Page(buttons=[*self.buttons[i : i + 3], self._next_page], **kwargs)
                 for i in range(0, len(self.buttons), 3)
             ]
 

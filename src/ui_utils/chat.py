@@ -3,13 +3,9 @@ import unrealsdk
 from mods_base import get_pc
 
 
-# bl1 doesnt have timestamp in the chat
-def show_chat_message(
-    message: str,
-    user: str | None = None
-) -> None:
+def show_chat_message(message: str, user: str | None = None) -> None:
     """
-    Prints a message to chat - with protection against the offline crash.
+    Prints a message to chat.
 
     Args:
         message: The message to print.
@@ -26,9 +22,10 @@ def show_chat_message(
     if user is None:
         user = pc.PlayerReplicationInfo.PlayerName
 
-    (pc.myHUD.GetHUDMovie().AddChatText(
+    (hud := pc.myHUD).GetHUDMovie().AddChatText(
         0,
         f"{user}: {message}",
-        get_pc().myHUD.DefaultMessageDuration,
-        unrealsdk.make_struct("Color", R=255, G=255, B=255, A=100),
-        get_pc().PlayerReplicationInfo))
+        hud.DefaultMessageDuration,
+        unrealsdk.make_struct("Color", R=255, G=255, B=255, A=255),
+        pc.PlayerReplicationInfo,
+    )
