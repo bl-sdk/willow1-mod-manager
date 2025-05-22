@@ -21,3 +21,7 @@ CTestTestfile.cmake
 _deps
 CMakeUserPresets.json
 __pycache__
+
+*.pyd
+*-sdk-*.zip
+*.sdkmod

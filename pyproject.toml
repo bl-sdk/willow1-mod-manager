@@ -3,6 +3,10 @@ pythonVersion = "3.13"
 typeCheckingMode = "strict"
 pythonPlatform = "Windows"
 
+include = ["src"]
+stubPath = "libs/pyunrealsdk/stubs"
+reportMissingModuleSource = false
+
 [tool.ruff]
 target-version = "py313"
 line-length = 100
