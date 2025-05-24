@@ -369,6 +369,7 @@ for mod in mods_to_import:
 # Import any mod manager modules which have specific initialization order requirements.
 # Most modules are fine to get imported as a mod/by another mod, but we need to do a few manually.
 # Prefer to import these after console is ready so we can show errors
+import keybinds  # noqa: F401, E402  # pyright: ignore[reportUnusedImport]
 from mods_base.mod_list import register_base_mod  # noqa: E402
 
 import_mods(mods_to_import)
