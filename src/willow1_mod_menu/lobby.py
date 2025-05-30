@@ -192,9 +192,9 @@ def menu_close(
     drawn_mods.clear()
 
 
-def open_mods_menu(frontend: WillowGFxMenuFrontend) -> None:
+def open_lobby_mods_menu(frontend: WillowGFxMenuFrontend) -> None:
     """
-    Opens the mods menu.
+    Opens the multiplayer lobby-based mods menu.
 
     Args:
         frontend: The frontend movie to open under.

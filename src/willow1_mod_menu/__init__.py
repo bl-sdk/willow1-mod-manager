@@ -1,6 +1,6 @@
 from mods_base.mod_list import base_mod
 
-from . import frontend, lobby  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from . import frontend, lobby, pause  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 __all__: list[str] = [
     "__author__",

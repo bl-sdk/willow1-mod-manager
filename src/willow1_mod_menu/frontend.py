@@ -6,11 +6,9 @@ from unrealsdk.unreal import BoundFunction, UObject, WrappedStruct
 
 from mods_base import hook
 
-from .lobby import open_mods_menu
+from .lobby import open_lobby_mods_menu
 
 
-# This hook is called to initalize a bunch of menus, including the main menu, we use it to inject
-# the mods entry
 @hook("WillowGame.WillowGFxMenuScreenDynamicText:Init")
 def inject_mods_into_frontend_screen(
     obj: UObject,
@@ -21,7 +19,7 @@ def inject_mods_into_frontend_screen(
     if obj.MenuTag != "Main":
         return
 
-    # This screen only supports 7 items, so we need to remove the DLC entry to make space for mods
+    # The main menu only supports 7 items, so we need to remove the DLC entry to make space for mods
 
     # However, it seems if we remove any entry from the array, it causes strings to start corrupting
     # across the unrealscript/ActionScript boundary - the Python side sets everything correctly
@@ -40,8 +38,6 @@ def inject_mods_into_frontend_screen(
     mod_item.Caption = ""
 
 
-# This hook runs oin initalizing the frontend menu, but it's a bit awkwardly timed, so we just set
-# up the previous hook
 @hook("WillowGame.WillowGFxMenuFrontend:extOpenInitialScreen", immediately_enable=True)
 def open_frontend_pre(*_: Any) -> None:
     inject_mods_into_frontend_screen.enable()
@@ -66,4 +62,4 @@ def frontend_activate(
 ) -> None:
     if args.ItemTag != "Mods":
         return
-    open_mods_menu(obj)
+    open_lobby_mods_menu(obj)
