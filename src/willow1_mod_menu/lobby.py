@@ -68,8 +68,14 @@ def init_content(
     obj.menuStart(obj.GetLocalPlayerID())
 
     drawn_mods.clear()
-    for mod in get_ordered_mod_list():
-        obj.menuAddItem(0, html_to_plain_text(mod.name))
+    for idx, mod in enumerate(get_ordered_mod_list()):
+        obj.menuAddItem(
+            0,
+            html_to_plain_text(mod.name),
+            str(idx),
+            "extHostP",  # The callback run on selecting an entry
+            "Focus:extMenuFocus",  # The callback run on changing focus
+        )
         drawn_mods.append(mod)
 
     obj.menuEnd()
@@ -79,15 +85,15 @@ def init_content(
     obj.SetVariableBool("lobby.montage._visible", False)
     obj.SetVariableNumber("lobby.tips._y", obj.GetVariableNumber("lobby.montage._y"))
 
-    next_tick.enable()
+    init_next_tick.enable()
 
     return Block
 
 
 # There's a handful of things we don't seem to be able to immediately change, update them next tick
 @hook("WillowGame.WillowUIInteraction:TickImp")
-def next_tick(*_: Any) -> None:
-    next_tick.disable()
+def init_next_tick(*_: Any) -> None:
+    init_next_tick.disable()
     if (menu := current_menu()) is None:
         return
 
@@ -141,37 +147,36 @@ def update_menu_for_mod(menu: WillowGFxLobbyMultiplayer, mod: Mod) -> None:
     menu.SetVariableString("lobby.tooltips.text", tooltip)
 
 
-# Kind of hackily, we detect when you reselect items by looking for the sound it plays. There isn't
-# a better hook for this
-@hook("GearboxFramework.GearboxGFxMovie:PlaySpecialUISound")
-def menu_move(
+@hook("WillowGame.WillowGFxLobbyMultiplayer:extMenuFocus")
+def menu_focus(
+    obj: UObject,
+    args: WrappedStruct,
+    _ret: Any,
+    _func: BoundFunction,
+) -> type[Block]:
+    try:
+        selected_mod = drawn_mods[int(args.MenuTag)]
+    except (ValueError, IndexError):
+        return Block
+
+    update_menu_for_mod(obj, selected_mod)
+    return Block
+
+
+@hook("WillowGame.WillowGFxLobbyMultiplayer:extHostP")
+def menu_select(
     _obj: UObject,
     args: WrappedStruct,
     _ret: Any,
     _func: BoundFunction,
-) -> None:
-    if args.SoundString != "VerticalMovement":
-        return
+) -> type[Block]:
+    try:
+        selected_mod = drawn_mods[int(args.MenuTag)]
+    except (ValueError, IndexError):
+        return Block
 
-    if (menu := current_menu()) is None:
-        return
-
-    # Being a little awkward so we can use .emplace_struct
-    # This pattern isn't that important for single arg functions, but for longer ones it adds up
-    invoke = menu.Invoke
-    invoke_args = WrappedStruct(invoke.func)
-    invoke_args.Method = "findFocusedItem"
-    invoke_args.args.emplace_struct(Type=ASType.AS_String, S="string")
-    selected = invoke(invoke_args).S
-
-    match = RE_SELECTED_IDX.match(selected)
-    if match is None:
-        return
-    selected_idx = int(match.group(1))
-    if selected_idx >= len(drawn_mods):
-        return
-
-    update_menu_for_mod(menu, drawn_mods[selected_idx])
+    print("selected mod", selected_mod.name)
+    return Block
 
 
 @hook("WillowGame.WillowGFxLobbyMultiplayer:OnClose")
@@ -183,8 +188,9 @@ def menu_close(
 ) -> None:
     block_search_delegate.disable()
     init_content.disable()
-    next_tick.disable()
-    menu_move.disable()
+    init_next_tick.disable()
+    menu_focus.disable()
+    menu_select.disable()
     menu_close.disable()
 
     global current_menu
@@ -201,7 +207,8 @@ def open_lobby_mods_menu(frontend: WillowGFxMenuFrontend) -> None:
     """
     block_search_delegate.enable()
     init_content.enable()
-    menu_move.enable()
+    menu_focus.enable()
+    menu_select.enable()
     menu_close.enable()
 
     frontend.OpenMP()
