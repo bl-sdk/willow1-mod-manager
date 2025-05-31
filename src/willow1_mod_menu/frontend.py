@@ -8,7 +8,9 @@ from mods_base import hook
 from mods_base.mod_list import mod_list
 
 from .lobby import open_lobby_mods_menu
-from .options import create_options_menu
+from .options import create_mod_options_menu
+
+MODS_MENU_TAG = "willow1-mod-menu:mods-frontend"
 
 
 @hook("WillowGame.WillowGFxMenuScreenDynamicText:Init")
@@ -31,7 +33,7 @@ def inject_mods_into_frontend_screen(
 
     # The last two entries are now identical quit entries - turn the second last into our mods entry
     mod_item = obj.Items[-2]
-    mod_item.Tag = "Mods"
+    mod_item.Tag = MODS_MENU_TAG
     mod_item.CaptionMarkup = "Mods"
     mod_item.bSuppressPC = False
     mod_item.bSuppress360 = False
@@ -62,7 +64,7 @@ def frontend_activate(
     _ret: Any,
     _func: BoundFunction,
 ) -> None:
-    if args.ItemTag != "Mods":
+    if args.ItemTag != MODS_MENU_TAG:
         return
     # open_lobby_mods_menu(obj)
-    create_options_menu(obj, mod_list[2])
+    create_mod_options_menu(obj, mod_list[4])

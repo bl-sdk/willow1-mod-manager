@@ -1,37 +1,127 @@
 # ruff: noqa: D103
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 import unrealsdk
 from unrealsdk.hooks import Block
 from unrealsdk.unreal import BoundFunction, UFunction, UObject, WrappedStruct
 
-from mods_base import Mod, hook, html_to_plain_text
+from mods_base import Mod, NestedOption, hook, html_to_plain_text
 
-from .populators.options import OptionPopulator
+if TYPE_CHECKING:
+    from .populators import Populator, WillowGFxMenu
 
-type WillowGFxMenu = UObject
-type WillowGFxLobbyTools = UObject
+CUSTOM_OPTIONS_MENU_TAG = "willow1-mod-menu:custom-option"
+
+populator_stack: list[Populator] = []
 
 
-def create_options_menu(obj: WillowGFxMenu, mod: Mod) -> None:
-    text = unrealsdk.construct_object("WillowGFxMenuScreenGeneric", outer=obj)
-    text.Init(obj, 0)
-    obj.ScreenStack.append(text)
-    obj.ActivateTopPage(0)
-    obj.PlayUISound("Confirm")
+def create_mod_options_menu(menu: WillowGFxMenu, mod: Mod) -> None:
+    populator_stack.append(OptionPopulator(mod.name, mod.options))
+    open_new_generic_menu(menu)
 
-    tools = obj.GetLobbyTools()
+
+def create_nested_options_menu(menu: WillowGFxMenu, option: NestedOption) -> None:
+    populator_stack.append(OptionPopulator(option.display_name, option.children))
+    open_new_generic_menu(menu)
+
+
+# Avoid circular imports
+from .populators.options import OptionPopulator  # noqa: E402
+
+# ==================================================================================================
+
+
+def open_new_generic_menu(menu: WillowGFxMenu) -> None:
+    if len(populator_stack) == 1:
+        custom_menu_activate.enable()
+        custom_menu_slider_change.enable()
+        custom_menu_spinner_change.enable()
+
+    text = unrealsdk.construct_object("WillowGFxMenuScreenGeneric", outer=menu)
+    text.MenuTag = CUSTOM_OPTIONS_MENU_TAG
+    text.Init(menu, 0)
+
+    menu.ScreenStack.append(text)
+    menu.ActivateTopPage(0)
+    menu.PlayUISound("Confirm")
+
+    tools = menu.GetLobbyTools()
     tools.menuStart(0)
 
-    OptionPopulator(mod.options).populate(tools)
+    populator = populator_stack[-1]
+    populator.populate(tools)
 
     tools.menuEnd()
 
-    obj.SetVariableString("menu.selections.title.text", html_to_plain_text(mod.name))
-    obj.SetVariableString(
+    menu.SetVariableString("menu.selections.title.text", html_to_plain_text(populator.title))
+    menu.SetVariableString(
         "menu.tooltips.htmlText",
-        obj.ResolveDataStoreMarkup("<Strings:WillowMenu.TitleMenu.SelBackBar>"),
+        menu.ResolveDataStoreMarkup("<Strings:WillowMenu.TitleMenu.SelBackBar>"),
     )
+
+
+@hook("WillowGame.WillowGFxMenu:extKeybinds")
+def custom_menu_activate(
+    obj: UObject,
+    args: WrappedStruct,
+    _ret: Any,
+    _func: BoundFunction,
+) -> type[Block]:
+    try:
+        populator = populator_stack[-1]
+    except IndexError:
+        return Block
+    populator.on_activate(obj, args.MenuTag)
+    return Block
+
+
+@hook("WillowGame.WillowGFxMenu:extSpinnerChanged")
+def custom_menu_spinner_change(
+    obj: UObject,
+    args: WrappedStruct,
+    _ret: Any,
+    _func: BoundFunction,
+) -> type[Block]:
+    try:
+        populator = populator_stack[-1]
+    except IndexError:
+        return Block
+    populator.on_spinner_change(obj, args.MenuTag, args.IValue)
+    return Block
+
+
+@hook("WillowGame.WillowGFxMenu:extSliderChanged")
+def custom_menu_slider_change(
+    obj: UObject,
+    args: WrappedStruct,
+    _ret: Any,
+    _func: BoundFunction,
+) -> type[Block]:
+    try:
+        populator = populator_stack[-1]
+    except IndexError:
+        return Block
+    populator.on_slider_change(obj, args.MenuTag, args.Value)
+    return Block
+
+
+@hook("WillowGame.WillowGFxMenuScreenGeneric:Screen_Deactivate", immediately_enable=True)
+def generic_screen_deactivate(
+    obj: UObject,
+    _args: WrappedStruct,
+    _ret: Any,
+    _func: BoundFunction,
+) -> None:
+    if obj.MenuTag == CUSTOM_OPTIONS_MENU_TAG:
+        populator_stack.pop()
+        # TODO: save mod settings
+
+    if not populator_stack:
+        custom_menu_activate.disable()
+        custom_menu_spinner_change.disable()
+        custom_menu_slider_change.disable()
 
 
 # ==================================================================================================

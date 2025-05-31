@@ -6,6 +6,8 @@ from unrealsdk.unreal import BoundFunction, UObject, WrappedStruct
 
 from mods_base import hook
 
+MODS_MENU_TAG = "willow1-mod-menu:mods-pause"
+
 
 # In contrast to the frontend menu, the pause menu uses a generic menu screen, so the best place to
 # hook to inject our own seems to be as we're adding the exit option
@@ -21,7 +23,7 @@ def inject_mods_into_pause_screen(
 
     # We also don't seem to have a great way of detecting generic item activate events, so instead
     # we hook this to an unused debug function
-    func(0, "Mods", "Mods", "extMainDebug")
+    func(0, "Mods", MODS_MENU_TAG, "extMainDebug")
 
 
 @hook("WillowGame.WillowGFxMenuPause:extInitMain", immediately_enable=True)

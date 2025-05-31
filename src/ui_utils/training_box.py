@@ -75,7 +75,8 @@ class TrainingBox:
         dialog: UObject = pc.GFxUIManager.ShowTrainingDialog(
             self.message,
             self.title,
-            self.min_duration,
+            # If we pass in 0, the waiting text never goes away (though you can exit)
+            max(0.001, self.min_duration),
         )
         dialog.ApplyLayout()
         self._gfx_object = WeakPointer(dialog)
