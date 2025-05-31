@@ -5,8 +5,10 @@ from unrealsdk.hooks import Type
 from unrealsdk.unreal import BoundFunction, UObject, WrappedStruct
 
 from mods_base import hook
+from mods_base.mod_list import mod_list
 
 from .lobby import open_lobby_mods_menu
+from .options import create_options_menu
 
 
 @hook("WillowGame.WillowGFxMenuScreenDynamicText:Init")
@@ -62,4 +64,5 @@ def frontend_activate(
 ) -> None:
     if args.ItemTag != "Mods":
         return
-    open_lobby_mods_menu(obj)
+    # open_lobby_mods_menu(obj)
+    create_options_menu(obj, mod_list[2])
