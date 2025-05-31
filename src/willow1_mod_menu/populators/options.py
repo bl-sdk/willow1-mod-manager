@@ -47,7 +47,7 @@ class OptionPopulator(Populator):
                 pass
             case _:
                 logging.error(
-                    f"Option '{option.identifier}' of unknown type {type(option)} was unexpectly"
+                    f"Option '{option.identifier}' of unknown type {type(option)} was unexpectedly"
                     f" activated",
                 )
 

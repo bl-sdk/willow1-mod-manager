@@ -76,7 +76,7 @@ class Populator(ABC):
         Args:
             tools: The lobby tools which may be used to add to the menu.
             name: The name of the spinner.
-            current_choice: The choice that should be initally selected.
+            current_choice: The choice that should be initially selected.
             choices: The list of all choices.
             option: The option associated with this spinner, to be passed back to the callback.
         """

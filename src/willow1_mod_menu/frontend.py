@@ -5,10 +5,8 @@ from unrealsdk.hooks import Type
 from unrealsdk.unreal import BoundFunction, UObject, WrappedStruct
 
 from mods_base import hook
-from mods_base.mod_list import mod_list
 
 from .lobby import open_lobby_mods_menu
-from .options import create_mod_options_menu
 
 MODS_MENU_TAG = "willow1-mod-menu:mods-frontend"
 
@@ -66,5 +64,4 @@ def frontend_activate(
 ) -> None:
     if args.ItemTag != MODS_MENU_TAG:
         return
-    # open_lobby_mods_menu(obj)
-    create_mod_options_menu(obj, mod_list[4])
+    open_lobby_mods_menu(obj)

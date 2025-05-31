@@ -1,5 +1,4 @@
-# ruff: noqa: D103
-import re
+# ruff: noqa: D103, ERA001, ARG001, T201
 from typing import TYPE_CHECKING, Any
 
 import unrealsdk
@@ -8,6 +7,8 @@ from unrealsdk.unreal import BoundFunction, UObject, WeakPointer, WrappedStruct
 
 from mods_base import CoopSupport, Game, Mod, get_ordered_mod_list, hook, html_to_plain_text
 from mods_base.mod_list import base_mod
+
+# from .options import create_mod_options_menu
 
 type WillowGFxLobbyMultiplayer = UObject
 type WillowGFxMenuFrontend = UObject
@@ -34,7 +35,8 @@ FRIENDLY_DISPLAY_VERSION = unrealsdk.config.get("willow1_mod_menu", {}).get(
     "display_version",
     base_mod.version,
 )
-RE_SELECTED_IDX = re.compile(r"_level\d+\.mMenu\.mList\.item(\d+)$")
+CUSTOM_LOBBY_MENU_TAG = "willow1-mod-menu:lobby"
+
 
 current_menu = WeakPointer()
 drawn_mods: list[Mod] = []
@@ -52,7 +54,7 @@ def block_search_delegate(
     return Block
 
 
-# This hook is when the menu is actually initalized - we overwrite it with all our own logic
+# This hook is when the menu is actually initialized - we overwrite it with all our own logic
 @hook("WillowGame.WillowGFxLobbyMultiplayer:extInitContent")
 def init_content(
     obj: UObject,
@@ -65,13 +67,19 @@ def init_content(
 
     setattr(obj, "__OnInputKey__Delegate", obj.HandleInputKey)
 
-    obj.menuStart(obj.GetLocalPlayerID())
+    obj.menuStart(0, CUSTOM_LOBBY_MENU_TAG)
 
     drawn_mods.clear()
     for idx, mod in enumerate(get_ordered_mod_list()):
+        # Filter out the standard enabled statuses, for more variation in the list - it's harder
+        # to tell what's enabled or not when every single entry has a suffix
+        # If there's a custom status, we'll still show that
+        status = html_to_plain_text(mod.get_status()).strip()
+        suffix = "" if mod.is_enabled and status in ("Enabled", "Loaded") else f" ({status})"
+
         obj.menuAddItem(
             0,
-            html_to_plain_text(mod.name),
+            html_to_plain_text(mod.name) + suffix,
             str(idx),
             "extHostP",  # The callback run on selecting an entry
             "Focus:extMenuFocus",  # The callback run on changing focus
@@ -100,7 +108,7 @@ def init_next_tick(*_: Any) -> None:
     menu.SetVariableString("lobby.tab.text", "SDK Mod Manager")
     menu.SetVariableString("lobby.optionsHeader.text", "Mods")
 
-    # Most of the mod details could be updated in the inital hook, but there's a few parts which
+    # Most of the mod details could be updated in the initial hook, but there's a few parts which
     # need to be here
     update_menu_for_mod(menu, drawn_mods[0])
 
@@ -141,7 +149,7 @@ def update_menu_for_mod(menu: WillowGFxLobbyMultiplayer, mod: Mod) -> None:
 
     tooltip = "$<StringAliasMap:GFx_Accept> DETAILS"
     if not mod.enabling_locked:
-        tooltip += "     [Space] " + "DISABLE" if mod.is_enabled else "ENABLE"
+        tooltip += "     [Space] " + ("DISABLE" if mod.is_enabled else "ENABLE")
     tooltip += "     <Strings:WillowMenu.TitleMenu.BackBar>"
 
     menu.SetVariableString("lobby.tooltips.text", tooltip)
@@ -165,7 +173,7 @@ def menu_focus(
 
 @hook("WillowGame.WillowGFxLobbyMultiplayer:extHostP")
 def menu_select(
-    _obj: UObject,
+    obj: UObject,
     args: WrappedStruct,
     _ret: Any,
     _func: BoundFunction,
@@ -176,6 +184,11 @@ def menu_select(
         return Block
 
     print("selected mod", selected_mod.name)
+
+    # obj.Close()
+    # frontend = obj.PlayerOwner.GFxUIManager.GetPlayingMovie()
+    # create_mod_options_menu(frontend, selected_mod)
+
     return Block
 
 

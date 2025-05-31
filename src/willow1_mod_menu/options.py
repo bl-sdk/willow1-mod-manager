@@ -1,4 +1,4 @@
-# ruff: noqa: D103
+# ruff: noqa: D103, TD002, TD003, FIX002
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -48,7 +48,7 @@ def open_new_generic_menu(menu: WillowGFxMenu) -> None:
     menu.PlayUISound("Confirm")
 
     tools = menu.GetLobbyTools()
-    tools.menuStart(0)
+    tools.menuStart(0, CUSTOM_OPTIONS_MENU_TAG)
 
     populator = populator_stack[-1]
     populator.populate(tools)
