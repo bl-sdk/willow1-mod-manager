@@ -102,7 +102,7 @@ def get_all_mod_folders() -> Sequence[Path]:
             Path(x) for x in unrealsdk.config.get("mod_manager", {}).get("extra_folders", [])
         ]
 
-    return [Path(__file__).parent, *extra_folders]
+    return [Path(__file__).resolve().parent, *extra_folders]
 
 
 @cache
@@ -225,7 +225,6 @@ def find_mods_to_import(all_mod_folders: Sequence[Path]) -> Collection[ModInfo]:
                 mod_info = ModInfo(entry.name, entry)
 
             elif entry.is_file() and validate_file_in_mods_folder(entry):
-                # Files are never legacy mods
                 mod_info = ModInfo(entry.stem, entry)
             else:
                 continue
