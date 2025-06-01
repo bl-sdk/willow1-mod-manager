@@ -1,4 +1,5 @@
-# ruff: noqa: D103, ERA001, ARG001, T201
+# ruff: noqa: D103
+import re
 from typing import TYPE_CHECKING, Any
 
 import unrealsdk
@@ -35,8 +36,7 @@ FRIENDLY_DISPLAY_VERSION = unrealsdk.config.get("willow1_mod_menu", {}).get(
     "display_version",
     base_mod.version,
 )
-CUSTOM_LOBBY_MENU_TAG = "willow1-mod-menu:lobby"
-
+RE_SELECTED_IDX = re.compile(r"_level\d+\.mMenu\.mList\.item(\d+)$")
 
 current_menu = WeakPointer()
 drawn_mods: list[Mod] = []
@@ -67,23 +67,24 @@ def init_content(
 
     setattr(obj, "__OnInputKey__Delegate", obj.HandleInputKey)
 
-    obj.menuStart(0, CUSTOM_LOBBY_MENU_TAG)
+    # Setting a custom tag here seems to subtly corrupt something on the ActionScript end,
+    # eventually leading to stack corruption and a crash
+    # Luckily, it seems to work fine without
+    obj.menuStart(0)
 
     drawn_mods.clear()
-    for idx, mod in enumerate(get_ordered_mod_list()):
+    for mod in get_ordered_mod_list():
         # Filter out the standard enabled statuses, for more variation in the list - it's harder
         # to tell what's enabled or not when every single entry has a suffix
         # If there's a custom status, we'll still show that
         status = html_to_plain_text(mod.get_status()).strip()
         suffix = "" if mod.is_enabled and status in ("Enabled", "Loaded") else f" ({status})"
 
-        obj.menuAddItem(
-            0,
-            html_to_plain_text(mod.name) + suffix,
-            str(idx),
-            "extHostP",  # The callback run on selecting an entry
-            "Focus:extMenuFocus",  # The callback run on changing focus
-        )
+        # This function has extra options for other commands, and a lot of base game calls pass
+        # something like `menuAddItem(0, "title", "tag", "extHostP", "Focus:extMenuFocus")`
+        # Unfortunately for us, it seems passing anything after the title also results in corruption
+        # This gives us a rough time later on actually detecting select/focus
+        obj.menuAddItem(0, html_to_plain_text(mod.name) + suffix)
         drawn_mods.append(mod)
 
     obj.menuEnd()
@@ -149,47 +150,70 @@ def update_menu_for_mod(menu: WillowGFxLobbyMultiplayer, mod: Mod) -> None:
 
     tooltip = "$<StringAliasMap:GFx_Accept> DETAILS"
     if not mod.enabling_locked:
-        tooltip += "     [Space] " + ("DISABLE" if mod.is_enabled else "ENABLE")
+        tooltip += "     [Space] " + "DISABLE" if mod.is_enabled else "ENABLE"
     tooltip += "     <Strings:WillowMenu.TitleMenu.BackBar>"
 
     menu.SetVariableString("lobby.tooltips.text", tooltip)
 
 
-@hook("WillowGame.WillowGFxLobbyMultiplayer:extMenuFocus")
-def menu_focus(
-    obj: UObject,
+def get_focused_mod(menu: WillowGFxLobbyMultiplayer) -> Mod | None:
+    """
+    Gets the mod which is currently focused.
+
+    Args:
+        menu: The current menu to read the focused mod of.
+    Returns:
+        The selected mod, or None if unable to find.
+    """
+    # Being a little awkward so we can use .emplace_struct
+    # This pattern isn't that important for single arg functions, but for longer ones it adds up
+    invoke = menu.Invoke
+    invoke_args = WrappedStruct(invoke.func)
+    invoke_args.Method = "findFocusedItem"
+    invoke_args.args.emplace_struct(Type=ASType.AS_Number, N=0)
+    selected = invoke(invoke_args).S
+
+    match = RE_SELECTED_IDX.match(selected)
+    if match is None:
+        return None
+
+    try:
+        return drawn_mods[int(match.group(1))]
+    except (IndexError, ValueError):
+        return None
+
+
+# Since we can't detect select/menu moves with the dedicated hooks, the hack we do instead is to
+# look for the sounds they make
+@hook("GearboxFramework.GearboxGFxMovie:PlaySpecialUISound")
+def play_sound(
+    _obj: UObject,
     args: WrappedStruct,
     _ret: Any,
     _func: BoundFunction,
-) -> type[Block]:
-    try:
-        selected_mod = drawn_mods[int(args.MenuTag)]
-    except (ValueError, IndexError):
-        return Block
+) -> None:
+    match args.SoundString:
+        case "VerticalMovement":
+            select_next_tick.enable()
+        case "Confirm":
+            if (menu := current_menu()) is None:
+                return
+            mod = get_focused_mod(menu)
+            print("selected", None if mod is None else mod.name)
+        case _:
+            return
 
-    update_menu_for_mod(obj, selected_mod)
-    return Block
 
-
-@hook("WillowGame.WillowGFxLobbyMultiplayer:extHostP")
-def menu_select(
-    obj: UObject,
-    args: WrappedStruct,
-    _ret: Any,
-    _func: BoundFunction,
-) -> type[Block]:
-    try:
-        selected_mod = drawn_mods[int(args.MenuTag)]
-    except (ValueError, IndexError):
-        return Block
-
-    print("selected mod", selected_mod.name)
-
-    # obj.Close()
-    # frontend = obj.PlayerOwner.GFxUIManager.GetPlayingMovie()
-    # create_mod_options_menu(frontend, selected_mod)
-
-    return Block
+# For vertical movement, if scrolling using up/down, the sound plays after changing focus, we could
+# use the above hook. If using mouse however, it player before, so we need to wait a tick to update.
+@hook("WillowGame.WillowUIInteraction:TickImp")
+def select_next_tick(*_: Any) -> None:
+    select_next_tick.disable()
+    if (menu := current_menu()) is None:
+        return
+    mod = get_focused_mod(menu)
+    if mod is not None:
+        update_menu_for_mod(menu, mod)
 
 
 @hook("WillowGame.WillowGFxLobbyMultiplayer:OnClose")
@@ -202,8 +226,8 @@ def menu_close(
     block_search_delegate.disable()
     init_content.disable()
     init_next_tick.disable()
-    menu_focus.disable()
-    menu_select.disable()
+    play_sound.disable()
+    select_next_tick.disable()
     menu_close.disable()
 
     global current_menu
@@ -220,8 +244,7 @@ def open_lobby_mods_menu(frontend: WillowGFxMenuFrontend) -> None:
     """
     block_search_delegate.enable()
     init_content.enable()
-    menu_focus.enable()
-    menu_select.enable()
+    play_sound.enable()
     menu_close.enable()
 
     frontend.OpenMP()
