@@ -42,7 +42,7 @@ def create_mod_options_menu(menu: WillowGFxMenu, mod: Mod) -> None:
         menu: The current menu to create the new one under.
         mod: The mod to create the options menu for.
     """
-    populator_stack.append(ModOptionPopulator(mod.name, mod.options, mod))
+    populator_stack.append(ModOptionPopulator(mod.name, mod=mod))
     open_new_generic_menu(menu)
 
 

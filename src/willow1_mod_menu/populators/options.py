@@ -13,6 +13,7 @@ from mods_base import (
     NestedOption,
     SliderOption,
     SpinnerOption,
+    html_to_plain_text,
 )
 
 try:
@@ -88,7 +89,8 @@ class OptionPopulator(Populator):
             group_stack: The stack of currently open grouped options.
             option: The option to add a description of.
         """
-        if not option.description or TrainingBox is None:
+        description = html_to_plain_text(option.description)
+        if not description or TrainingBox is None:
             return
 
         # Indent if we're in the middle of a group, and not adding to a group header
