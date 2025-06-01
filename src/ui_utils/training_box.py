@@ -83,6 +83,7 @@ class TrainingBox:
 
         self._training_box_input_key.enable()
         self._training_box_on_close.enable()
+        self._training_box_on_cancel.enable()
 
     def is_showing(self) -> bool:
         """
@@ -97,6 +98,7 @@ class TrainingBox:
         """Hides the training box."""
         self._training_box_input_key.disable()
         self._training_box_on_close.disable()
+        self._training_box_on_cancel.disable()
 
         dialog = self._gfx_object()
         if dialog is None:
@@ -121,6 +123,7 @@ class TrainingBox:
         if dialog is None:
             self._training_box_input_key.disable()
             self._training_box_on_close.disable()
+            self._training_box_on_cancel.disable()
             return False
 
         return obj == dialog
@@ -156,6 +159,22 @@ class TrainingBox:
 
         self._training_box_input_key.disable()
         self._training_box_on_close.disable()
+        self._training_box_on_cancel.disable()
 
         if self.on_exit is not None:
             self.on_exit(self)
+
+    @hook("WillowGame.WillowGFxTrainingDialogBox:Cancelled")
+    def _training_box_on_cancel(
+        self,
+        obj: UObject,
+        args: WrappedStruct,
+        _3: Any,
+        _4: BoundFunction,
+    ) -> type[Block] | None:
+        if not self._is_correct_training_box(obj):
+            return None
+
+        # Normally this function is stubbed out, so you can't cancel, just redirect to accepting
+        obj.Accepted(args.ControllerId)
+        return Block
