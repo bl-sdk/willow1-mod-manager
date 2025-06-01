@@ -1,6 +1,7 @@
-# ruff: noqa: D103, TD002, TD003, FIX002
+# ruff: noqa: D103
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 import unrealsdk
@@ -9,10 +10,14 @@ from unrealsdk.unreal import BoundFunction, UFunction, UObject, WrappedStruct
 
 from mods_base import Mod, NestedOption, hook, html_to_plain_text
 
+from .util import find_focused_item
+
 if TYPE_CHECKING:
-    from .populators import Populator, WillowGFxMenu
+    from .populators import Populator
+    from .util import WillowGFxMenu
 
 CUSTOM_OPTIONS_MENU_TAG = "willow1-mod-menu:custom-option"
+RE_SELECTED_IDX = re.compile(r"^_level\d+\.menu\.selections\.mMenu\.mList\.item(\d+)$")
 
 populator_stack: list[Populator] = []
 
@@ -48,7 +53,7 @@ def open_new_generic_menu(menu: WillowGFxMenu) -> None:
     menu.PlayUISound("Confirm")
 
     tools = menu.GetLobbyTools()
-    tools.menuStart(0, CUSTOM_OPTIONS_MENU_TAG)
+    tools.menuStart(0)
 
     populator = populator_stack[-1]
     populator.populate(tools)
@@ -62,10 +67,30 @@ def open_new_generic_menu(menu: WillowGFxMenu) -> None:
     )
 
 
+def get_selected_idx(menu: WillowGFxMenu) -> int | None:
+    """
+    Gets the index of the currently selected option item.
+
+    Args:
+        menu: The current menu to read the selected item of.
+    Returns:
+        The selected index, or None if unable to find.
+    """
+    focused = find_focused_item(menu)
+    match = RE_SELECTED_IDX.match(focused)
+    if match is None:
+        return None
+
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
 @hook("WillowGame.WillowGFxMenu:extKeybinds")
 def custom_menu_activate(
     obj: UObject,
-    args: WrappedStruct,
+    _args: WrappedStruct,
     _ret: Any,
     _func: BoundFunction,
 ) -> type[Block]:
@@ -73,7 +98,9 @@ def custom_menu_activate(
         populator = populator_stack[-1]
     except IndexError:
         return Block
-    populator.on_activate(obj, args.MenuTag)
+    if (idx := get_selected_idx(obj)) is None:
+        return Block
+    populator.on_activate(obj, idx)
     return Block
 
 
@@ -88,7 +115,9 @@ def custom_menu_spinner_change(
         populator = populator_stack[-1]
     except IndexError:
         return Block
-    populator.on_spinner_change(obj, args.MenuTag, args.IValue)
+    if (idx := get_selected_idx(obj)) is None:
+        return Block
+    populator.on_spinner_change(obj, idx, args.IValue)
     return Block
 
 
@@ -103,7 +132,9 @@ def custom_menu_slider_change(
         populator = populator_stack[-1]
     except IndexError:
         return Block
-    populator.on_slider_change(obj, args.MenuTag, args.Value)
+    if (idx := get_selected_idx(obj)) is None:
+        return Block
+    populator.on_slider_change(obj, idx, args.Value)
     return Block
 
 

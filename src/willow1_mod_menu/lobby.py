@@ -1,6 +1,6 @@
 # ruff: noqa: D103
 import re
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import unrealsdk
 from unrealsdk.hooks import Block
@@ -9,34 +9,19 @@ from unrealsdk.unreal import BoundFunction, UObject, WeakPointer, WrappedStruct
 from mods_base import CoopSupport, Game, Mod, get_ordered_mod_list, hook, html_to_plain_text
 from mods_base.mod_list import base_mod
 
+from .util import find_focused_item
+
 # from .options import create_mod_options_menu
 
 type WillowGFxLobbyMultiplayer = UObject
 type WillowGFxMenuFrontend = UObject
 
-if TYPE_CHECKING:
-    from enum import auto
-
-    from unrealsdk.unreal._uenum import UnrealEnum  # pyright: ignore[reportMissingModuleSource]
-
-    class ASType(UnrealEnum):
-        AS_Undefined = auto()
-        AS_Null = auto()
-        AS_Number = auto()
-        AS_String = auto()
-        AS_Boolean = auto()
-        AS_MAX = auto()
-
-else:
-    from unrealsdk import find_enum
-
-    ASType = find_enum("ASType")
 
 FRIENDLY_DISPLAY_VERSION = unrealsdk.config.get("willow1_mod_menu", {}).get(
     "display_version",
     base_mod.version,
 )
-RE_SELECTED_IDX = re.compile(r"_level\d+\.mMenu\.mList\.item(\d+)$")
+RE_SELECTED_IDX = re.compile(r"^_level\d+\.mMenu\.mList\.item(\d+)$")
 
 current_menu = WeakPointer()
 drawn_mods: list[Mod] = []
@@ -165,15 +150,8 @@ def get_focused_mod(menu: WillowGFxLobbyMultiplayer) -> Mod | None:
     Returns:
         The selected mod, or None if unable to find.
     """
-    # Being a little awkward so we can use .emplace_struct
-    # This pattern isn't that important for single arg functions, but for longer ones it adds up
-    invoke = menu.Invoke
-    invoke_args = WrappedStruct(invoke.func)
-    invoke_args.Method = "findFocusedItem"
-    invoke_args.args.emplace_struct(Type=ASType.AS_Number, N=0)
-    selected = invoke(invoke_args).S
-
-    match = RE_SELECTED_IDX.match(selected)
+    focused = find_focused_item(menu)
+    match = RE_SELECTED_IDX.match(focused)
     if match is None:
         return None
 

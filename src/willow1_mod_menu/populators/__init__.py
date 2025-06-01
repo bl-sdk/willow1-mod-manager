@@ -7,8 +7,8 @@ from unrealsdk import logging
 from unrealsdk.unreal import UObject
 
 from mods_base import BaseOption, BoolOption, DropdownOption, SliderOption, SpinnerOption
+from willow1_mod_menu.util import WillowGFxMenu
 
-type WillowGFxMenu = UObject
 type WillowGFxLobbyTools = UObject
 
 
@@ -18,10 +18,10 @@ RE_INVALID_SPINNER_CHARS = re.compile("[:,]")
 @dataclass
 class Populator(ABC):
     title: str
-    drawn_options: dict[str, BaseOption] = field(
+    drawn_options: list[BaseOption] = field(
         init=False,
         repr=False,
-        default_factory=dict[str, BaseOption],
+        default_factory=list[BaseOption],
     )
 
     @abstractmethod
@@ -60,7 +60,7 @@ class Populator(ABC):
         """
         tag = self._get_next_tag(option)
         tools.menuAddItem(0, text, tag, "extKeybinds")
-        self.drawn_options[tag] = option
+        self.drawn_options.append(option)
 
     def draw_spinner(
         self,
@@ -107,7 +107,7 @@ class Populator(ABC):
             config_str,
             "Change:extSpinnerChanged",
         )
-        self.drawn_options[tag] = option
+        self.drawn_options.append(option)
 
     def draw_slider(
         self,
@@ -138,62 +138,67 @@ class Populator(ABC):
             f"Min:{min_value},Max:{max_value},Step:{step},Value:{value}",
             "Change:extSliderChanged",
         )
-        self.drawn_options[tag] = option
+        self.drawn_options.append(option)
 
-    def on_activate(self, menu: WillowGFxMenu, tag: str) -> None:
+    def on_activate(self, menu: WillowGFxMenu, idx: int) -> None:
         """
         Handles a raw menu item activation.
 
         Args:
             menu: The currently open menu.
-            tag: The tag of the item which was activated.
+            idx: The index of the item which was activated.
         """
-        if (option := self.drawn_options.get(tag)) is None:
-            logging.error(f"Can't find option '{tag}' which was changed")
+        try:
+            option = self.drawn_options[idx]
+        except IndexError:
+            logging.error(f"Can't find option which was changed at index {idx}")
             return
 
         self.handle_activate(menu, option)
 
-    def on_spinner_change(self, menu: WillowGFxMenu, tag: str, idx: int) -> None:
+    def on_spinner_change(self, menu: WillowGFxMenu, idx: int, choice_idx: int) -> None:
         """
         Handles a raw spinner change.
 
         Args:
             menu: The currently open menu.
-            tag: The tag of the item which was activated.
-            idx: The newly selected choice's index.
+            idx: The index of the item which was activated.
+            choice_idx: The newly selected choice's index.
         """
         _ = menu
-
-        if (option := self.drawn_options.get(tag)) is None:
-            logging.error(f"Can't find option '{tag}' which was changed")
+        try:
+            option = self.drawn_options[idx]
+        except IndexError:
+            logging.error(f"Can't find option which was changed at index {idx}")
             return
 
         match option:
             case BoolOption():
-                option.value = bool(idx)
+                option.value = bool(choice_idx)
             case DropdownOption() | SpinnerOption():
-                option.value = option.choices[idx]
+                option.value = option.choices[choice_idx]
             case _:
                 logging.error(
                     f"Option '{option.identifier}' got a spinner change event despite not being a"
                     " spinner",
                 )
 
-    def on_slider_change(self, menu: WillowGFxMenu, tag: str, value: float) -> None:
+    def on_slider_change(self, menu: WillowGFxMenu, idx: int, value: float) -> None:
         """
         Handles a raw slider change.
 
         Args:
             menu: The currently open menu.
-            tag: The tag of the item which was activated.
+            idx: The index of the item which was activated.
             value: The new value of the slider.
         """
         _ = menu
-
-        if (option := self.drawn_options.get(tag)) is None:
-            logging.error(f"Can't find option '{tag}' which was changed")
+        try:
+            option = self.drawn_options[idx]
+        except IndexError:
+            logging.error(f"Can't find option which was changed at index {idx}")
             return
+
         if not isinstance(option, SliderOption):
             logging.error(
                 f"Option '{option.identifier}' got a spinner change event despite not being a"
