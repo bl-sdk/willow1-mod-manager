@@ -205,15 +205,7 @@ class OptionPopulator(Populator):
                     )
 
                 case SliderOption():
-                    self.draw_slider(
-                        tools,
-                        option_name,
-                        option.value,
-                        option.min_value,
-                        option.max_value,
-                        option.step,
-                        option,
-                    )
+                    self.draw_slider(tools, option)
 
                 case GroupedOption() if option in group_stack:
                     logging.dev_warning(f"Found recursive options group, not drawing: {option}")

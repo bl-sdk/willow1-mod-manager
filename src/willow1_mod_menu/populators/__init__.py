@@ -7,7 +7,7 @@ from unrealsdk import logging
 from unrealsdk.unreal import UObject
 
 from mods_base import BaseOption, BoolOption, DropdownOption, SliderOption, SpinnerOption
-from willow1_mod_menu.util import WillowGFxMenu
+from willow1_mod_menu.util import WillowGFxMenu, find_focused_item
 
 type WillowGFxLobbyTools = UObject
 
@@ -109,33 +109,39 @@ class Populator(ABC):
         )
         self.drawn_options.append(option)
 
+    @staticmethod
+    def format_slider_label(option: SliderOption) -> str:
+        """
+        Combines a slider name and value into a single label string.
+
+        Args:
+            option: The slider to format a label for.
+        Returns:
+            The formatted label.
+        """
+        value = option.value
+        if option.is_integer or abs(option.step) > 1:
+            value = round(value)
+
+        return f"{option.display_name}: {value}"
+
     def draw_slider(
         self,
         tools: WillowGFxLobbyTools,
-        name: str,
-        value: float,
-        min_value: float,
-        max_value: float,
-        step: float,
-        option: BaseOption,
+        option: SliderOption,
     ) -> None:
         """
         Adds a slider to the menu.
 
         Args:
             tools: The lobby tools which may be used to add to the menu.
-            name: The name of the slider.
-            value: The slider's current value.
-            min_value: The slider's min allowed value.
-            max_value: The slider's max allowed value.
-            step: The slider's step.
-            option: The option associated with this slider, to be passed back to the callback
+            option: The slider option to get all the details from, and to be passed to the callback.
         """
         tag = self._get_next_tag(option)
         tools.menuAddSlider(
-            name,
+            self.format_slider_label(option),
             tag,
-            f"Min:{min_value},Max:{max_value},Step:{step},Value:{value}",
+            f"Min:{option.min_value},Max:{option.max_value},Step:{option.step},Value:{option.value}",
             "Change:extSliderChanged",
         )
         self.drawn_options.append(option)
@@ -206,4 +212,12 @@ class Populator(ABC):
             )
             return
 
+        if option.is_integer:
+            value = round(value)
+
         option.value = value
+
+        menu.SetVariableString(
+            find_focused_item(menu) + ".mLabel.text",
+            self.format_slider_label(option),
+        )
