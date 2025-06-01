@@ -11,8 +11,6 @@ from mods_base.mod_list import base_mod
 
 from .util import find_focused_item
 
-# from .options import create_mod_options_menu
-
 type WillowGFxLobbyMultiplayer = UObject
 type WillowGFxMenuFrontend = UObject
 
@@ -25,6 +23,25 @@ RE_SELECTED_IDX = re.compile(r"^_level\d+\.mMenu\.mList\.item(\d+)$")
 
 current_menu = WeakPointer()
 drawn_mods: list[Mod] = []
+
+
+def open_lobby_mods_menu(frontend: WillowGFxMenuFrontend) -> None:
+    """
+    Opens the multiplayer lobby-based mods menu.
+
+    Args:
+        frontend: The frontend movie to open under.
+    """
+    block_search_delegate.enable()
+    init_content.enable()
+    play_sound.enable()
+    menu_close.enable()
+
+    frontend.OpenMP()
+
+
+# Avoid circular import
+from .options import create_mod_options_menu  # noqa: E402
 
 
 # This is called when the movie is first started, to start looking for online games. We just want to
@@ -177,7 +194,12 @@ def play_sound(
             if (menu := current_menu()) is None:
                 return
             mod = get_focused_mod(menu)
-            print("selected", None if mod is None else mod.name)
+            if mod is None:
+                return
+
+            menu.Close()
+            frontend = menu.PlayerOwner.GFxUIManager.GetPlayingMovie()
+            create_mod_options_menu(frontend, mod)
         case _:
             return
 
@@ -211,18 +233,3 @@ def menu_close(
     global current_menu
     current_menu = WeakPointer()
     drawn_mods.clear()
-
-
-def open_lobby_mods_menu(frontend: WillowGFxMenuFrontend) -> None:
-    """
-    Opens the multiplayer lobby-based mods menu.
-
-    Args:
-        frontend: The frontend movie to open under.
-    """
-    block_search_delegate.enable()
-    init_content.enable()
-    play_sound.enable()
-    menu_close.enable()
-
-    frontend.OpenMP()

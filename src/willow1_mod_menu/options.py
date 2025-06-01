@@ -10,6 +10,7 @@ from unrealsdk.unreal import BoundFunction, UFunction, UObject, WrappedStruct
 
 from mods_base import Mod, NestedOption, hook, html_to_plain_text
 
+from .lobby import open_lobby_mods_menu
 from .util import find_focused_item
 
 if TYPE_CHECKING:
@@ -17,25 +18,52 @@ if TYPE_CHECKING:
     from .util import WillowGFxMenu
 
 CUSTOM_OPTIONS_MENU_TAG = "willow1-mod-menu:custom-option"
-RE_SELECTED_IDX = re.compile(r"^_level\d+\.menu\.selections\.mMenu\.mList\.item(\d+)$")
+RE_SELECTED_IDX = re.compile(r"^_level\d+\.(menu\.selections|content)\.mMenu\.mList\.item(\d+)$")
 
 populator_stack: list[Populator] = []
 
 
+def create_mod_list_options_menu(menu: WillowGFxMenu) -> None:
+    """
+    Creates a new menu holding the full mods list.
+
+    Args:
+        menu: The current menu to create the new one under.
+    """
+    populator_stack.append(ModListPopulator("Mods"))
+    open_new_generic_menu(menu)
+
+
 def create_mod_options_menu(menu: WillowGFxMenu, mod: Mod) -> None:
-    populator_stack.append(OptionPopulator(mod.name, mod.options))
+    """
+    Creates a new menu holding a single mod's options.
+
+    Args:
+        menu: The current menu to create the new one under.
+        mod: The mod to create the options menu for.
+    """
+    populator_stack.append(ModOptionPopulator(mod.name, mod.options, mod))
     open_new_generic_menu(menu)
 
 
 def create_nested_options_menu(menu: WillowGFxMenu, option: NestedOption) -> None:
+    """
+    Creates a new menu holding a nested option's children.
+
+    Args:
+        menu: The current menu to create the new one under.
+        option: The options whose children to create a menu for.
+    """
     populator_stack.append(OptionPopulator(option.display_name, option.children))
     open_new_generic_menu(menu)
 
 
-# Avoid circular imports
-from .populators.options import OptionPopulator  # noqa: E402
-
 # ==================================================================================================
+
+# Avoid circular imports
+from .populators.mod_list import ModListPopulator  # noqa: E402
+from .populators.mod_options import ModOptionPopulator  # noqa: E402
+from .populators.options import OptionPopulator  # noqa: E402
 
 
 def open_new_generic_menu(menu: WillowGFxMenu) -> None:
@@ -82,7 +110,7 @@ def get_selected_idx(menu: WillowGFxMenu) -> int | None:
         return None
 
     try:
-        return int(match.group(1))
+        return int(match.group(2))
     except ValueError:
         return None
 
@@ -145,14 +173,18 @@ def generic_screen_deactivate(
     _ret: Any,
     _func: BoundFunction,
 ) -> None:
-    if obj.MenuTag == CUSTOM_OPTIONS_MENU_TAG:
-        populator_stack.pop()
-        # TODO: save mod settings
+    if obj.MenuTag == CUSTOM_OPTIONS_MENU_TAG and populator_stack:
+        last_populator = populator_stack.pop()
+        if isinstance(last_populator, ModOptionPopulator):
+            last_populator.mod.save_settings()
 
     if not populator_stack:
         custom_menu_activate.disable()
         custom_menu_spinner_change.disable()
         custom_menu_slider_change.disable()
+
+        if (owner := obj.MenuOwner).Class.Name == "WillowGFxMenuFrontend":
+            open_lobby_mods_menu(owner)
 
 
 # ==================================================================================================

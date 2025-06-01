@@ -1,10 +1,12 @@
-# ruff: noqa: D103, T201, TD002, TD003, TD004, TD005, FIX002
+# ruff: noqa: D103
 from typing import Any
 
 from unrealsdk.hooks import Block, Type
 from unrealsdk.unreal import BoundFunction, UObject, WrappedStruct
 
 from mods_base import hook
+
+from .options import create_mod_list_options_menu
 
 MODS_MENU_TAG = "willow1-mod-menu:mods-pause"
 
@@ -41,9 +43,14 @@ def open_pause_post(*_: Any) -> None:
 
 
 @hook("WillowGame.WillowGFxMenuPause:extMainDebug", immediately_enable=True)
-def pause_activate(*_: Any) -> type[Block]:
+def pause_activate(
+    obj: UObject,
+    _args: WrappedStruct,
+    _ret: Any,
+    _func: BoundFunction,
+) -> type[Block]:
     # We don't seem to be able to open the multiplayer lobby menu from in game - even if we force
     # load it's definition - so instead just open a standard options list showing each mod
-    print("OPEN SIMPLE MODS MENU")  # TODO
+    create_mod_list_options_menu(obj)
 
     return Block
