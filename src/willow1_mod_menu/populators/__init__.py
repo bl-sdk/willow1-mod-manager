@@ -46,9 +46,6 @@ class Populator(ABC):
 
     # ==============================================================================================
 
-    def _get_next_tag(self, option: BaseOption) -> str:
-        return f"willow1-mod-menu:{len(self.drawn_options)}:{option.identifier}"
-
     def draw_text(self, tools: WillowGFxLobbyTools, text: str, option: BaseOption) -> None:
         """
         Adds a line of text to the menu.
@@ -58,8 +55,7 @@ class Populator(ABC):
             text: The text to display.
             option: The option associated with this text, to be passed back to the callback.
         """
-        tag = self._get_next_tag(option)
-        tools.menuAddItem(0, text, tag, "extKeybinds")
+        tools.menuAddItem(0, text)
         self.drawn_options.append(option)
 
     def draw_spinner(
@@ -100,12 +96,10 @@ class Populator(ABC):
             )
             config_str += "0"
 
-        tag = self._get_next_tag(option)
         tools.menuAddSpinner(
             name,
-            tag,
+            "",
             config_str,
-            "Change:extSpinnerChanged",
         )
         self.drawn_options.append(option)
 
@@ -137,12 +131,10 @@ class Populator(ABC):
             tools: The lobby tools which may be used to add to the menu.
             option: The slider option to get all the details from, and to be passed to the callback.
         """
-        tag = self._get_next_tag(option)
         tools.menuAddSlider(
             self.format_slider_label(option),
-            tag,
+            "",
             f"Min:{option.min_value},Max:{option.max_value},Step:{option.step},Value:{option.value}",
-            "Change:extSliderChanged",
         )
         self.drawn_options.append(option)
 
@@ -162,14 +154,14 @@ class Populator(ABC):
 
         self.handle_activate(menu, option)
 
-    def on_spinner_change(self, menu: WillowGFxMenu, idx: int, choice_idx: int) -> None:
+    def on_slider_spinner_change(self, menu: WillowGFxMenu, idx: int, value: float) -> None:
         """
-        Handles a raw spinner change.
+        Handles a raw slider or spinner change event.
 
         Args:
             menu: The currently open menu.
             idx: The index of the item which was activated.
-            choice_idx: The newly selected choice's index.
+            value: The option's new value.
         """
         _ = menu
         try:
@@ -180,44 +172,21 @@ class Populator(ABC):
 
         match option:
             case BoolOption():
-                option.value = bool(choice_idx)
+                option.value = bool(value)
             case DropdownOption() | SpinnerOption():
-                option.value = option.choices[choice_idx]
-            case _:
-                logging.error(
-                    f"Option '{option.identifier}' got a spinner change event despite not being a"
-                    " spinner",
+                option.value = option.choices[int(value)]
+            case SliderOption():
+                if option.is_integer:
+                    value = round(value)
+                option.value = value
+
+                menu.SetVariableString(
+                    find_focused_item(menu) + ".mLabel.text",
+                    self.format_slider_label(option),
                 )
 
-    def on_slider_change(self, menu: WillowGFxMenu, idx: int, value: float) -> None:
-        """
-        Handles a raw slider change.
-
-        Args:
-            menu: The currently open menu.
-            idx: The index of the item which was activated.
-            value: The new value of the slider.
-        """
-        _ = menu
-        try:
-            option = self.drawn_options[idx]
-        except IndexError:
-            logging.error(f"Can't find option which was changed at index {idx}")
-            return
-
-        if not isinstance(option, SliderOption):
-            logging.error(
-                f"Option '{option.identifier}' got a spinner change event despite not being a"
-                " spinner",
-            )
-            return
-
-        if option.is_integer:
-            value = round(value)
-
-        option.value = value
-
-        menu.SetVariableString(
-            find_focused_item(menu) + ".mLabel.text",
-            self.format_slider_label(option),
-        )
+            case _:
+                logging.error(
+                    f"Option '{option.identifier}' of unknown type {type(option)} unexpectedly got"
+                    f" a slider/spinner change event",
+                )

@@ -68,9 +68,7 @@ from .populators.options import OptionPopulator  # noqa: E402
 
 def open_new_generic_menu(menu: WillowGFxMenu) -> None:
     if len(populator_stack) == 1:
-        custom_menu_activate.enable()
-        custom_menu_slider_change.enable()
-        custom_menu_spinner_change.enable()
+        play_sound.enable()
 
     text = unrealsdk.construct_object("WillowGFxMenuScreenGeneric", outer=menu)
     text.MenuTag = CUSTOM_OPTIONS_MENU_TAG
@@ -115,55 +113,30 @@ def get_selected_idx(menu: WillowGFxMenu) -> int | None:
         return None
 
 
-@hook("WillowGame.WillowGFxMenu:extKeybinds")
-def custom_menu_activate(
-    obj: UObject,
-    _args: WrappedStruct,
-    _ret: Any,
-    _func: BoundFunction,
-) -> type[Block]:
-    try:
-        populator = populator_stack[-1]
-    except IndexError:
-        return Block
-    if (idx := get_selected_idx(obj)) is None:
-        return Block
-    populator.on_activate(obj, idx)
-    return Block
-
-
-@hook("WillowGame.WillowGFxMenu:extSpinnerChanged")
-def custom_menu_spinner_change(
+# Similarly to the lobby menu, we need to use sounds to detect when you click an option/adjust a
+# slider, since we can't safely pass callback names to ActionScript
+@hook("GearboxFramework.GearboxGFxMovie:PlaySpecialUISound")
+def play_sound(
     obj: UObject,
     args: WrappedStruct,
     _ret: Any,
     _func: BoundFunction,
-) -> type[Block]:
+) -> None:
+    if args.SoundString not in ("Confirm", "SliderMovement"):
+        return
+
     try:
         populator = populator_stack[-1]
     except IndexError:
-        return Block
+        return
     if (idx := get_selected_idx(obj)) is None:
-        return Block
-    populator.on_spinner_change(obj, idx, args.IValue)
-    return Block
+        return
 
-
-@hook("WillowGame.WillowGFxMenu:extSliderChanged")
-def custom_menu_slider_change(
-    obj: UObject,
-    args: WrappedStruct,
-    _ret: Any,
-    _func: BoundFunction,
-) -> type[Block]:
-    try:
-        populator = populator_stack[-1]
-    except IndexError:
-        return Block
-    if (idx := get_selected_idx(obj)) is None:
-        return Block
-    populator.on_slider_change(obj, idx, args.Value)
-    return Block
+    if args.SoundString == "Confirm":
+        populator.on_activate(obj, idx)
+    else:
+        value = obj.GetVariableNumber(find_focused_item(obj) + ".Value")
+        populator.on_slider_spinner_change(obj, idx, value)
 
 
 @hook("WillowGame.WillowGFxMenuScreenGeneric:Screen_Deactivate", immediately_enable=True)
@@ -179,9 +152,7 @@ def generic_screen_deactivate(
             last_populator.mod.save_settings()
 
     if not populator_stack:
-        custom_menu_activate.disable()
-        custom_menu_spinner_change.disable()
-        custom_menu_slider_change.disable()
+        play_sound.disable()
 
         if (owner := obj.MenuOwner).Class.Name == "WillowGFxMenuFrontend":
             open_lobby_mods_menu(owner)
