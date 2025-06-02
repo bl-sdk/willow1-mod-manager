@@ -102,7 +102,12 @@ def draw_custom_menu(menu: WillowGFxMenu) -> None:
 
     tools.menuEnd()
 
-    menu.SetVariableString("menu.selections.title.text", html_to_plain_text(populator.title))
+    # There's a different variable for the title in the frontend vs pause menus, luckily we can just
+    # try set both
+    title = html_to_plain_text(populator.title)
+    menu.SetVariableString("menu.selections.title.text", title)  # Frontend
+    menu.SetVariableString("_level0.title.text", title)  # Pause
+
     menu.SetVariableString(
         "menu.tooltips.htmlText",
         menu.ResolveDataStoreMarkup("<Strings:WillowMenu.TitleMenu.SelBackBar>"),
