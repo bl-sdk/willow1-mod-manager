@@ -5,7 +5,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 import unrealsdk
-from unrealsdk.hooks import Block
+from unrealsdk.hooks import Block, Type
 from unrealsdk.unreal import BoundFunction, UFunction, UObject, WrappedStruct
 
 from mods_base import Mod, NestedOption, hook, html_to_plain_text
@@ -67,6 +67,12 @@ from .populators.options import OptionPopulator  # noqa: E402
 
 
 def open_new_generic_menu(menu: WillowGFxMenu) -> None:
+    """
+    Creates a new generic menu with the populator on top of the stack.
+
+    Args:
+        menu: The current menu to open the generic one under.
+    """
     if len(populator_stack) == 1:
         play_sound.enable()
 
@@ -78,6 +84,16 @@ def open_new_generic_menu(menu: WillowGFxMenu) -> None:
     menu.ActivateTopPage(0)
     menu.PlayUISound("Confirm")
 
+    draw_custom_menu(menu)
+
+
+def draw_custom_menu(menu: WillowGFxMenu) -> None:
+    """
+    Draws the populator on top of the stack to the current menu.
+
+    Args:
+        menu: The current menu to draw under.
+    """
     tools = menu.GetLobbyTools()
     tools.menuStart(0)
 
@@ -151,11 +167,26 @@ def generic_screen_deactivate(
         if isinstance(last_populator, ModOptionPopulator):
             last_populator.mod.save_settings()
 
+        if populator_stack:
+            # If we have screens left, we can't immediately redraw them here, need to wait a little
+            reactivate_upper_screen.enable()
+
     if not populator_stack:
         play_sound.disable()
 
         if (owner := obj.MenuOwner).Class.Name == "WillowGFxMenuFrontend":
             open_lobby_mods_menu(owner)
+
+
+@hook("WillowGame.WillowGFxMenu:ActivateTopPage", hook_type=Type.POST)
+def reactivate_upper_screen(
+    obj: UObject,
+    _args: WrappedStruct,
+    _ret: Any,
+    _func: BoundFunction,
+) -> None:
+    reactivate_upper_screen.disable()
+    draw_custom_menu(obj)
 
 
 # ==================================================================================================
