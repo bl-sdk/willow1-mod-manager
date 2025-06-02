@@ -65,6 +65,24 @@ from .populators.mod_list import ModListPopulator  # noqa: E402
 from .populators.mod_options import ModOptionPopulator  # noqa: E402
 from .populators.options import OptionPopulator  # noqa: E402
 
+# Weirdly, we need to perform a delayed init once, the very first time you open a generic menu
+# screen after starting the frontend. On subsequent calls we can initalize immediately, and we can
+# always do so from the pause menu. This tracks that.
+needs_delayed_init = False
+
+
+@hook("WillowGame.WillowGFxMenuFrontend:extOpenInitialScreen", immediately_enable=True)
+def trigger_delayed_init(*_: Any) -> None:
+    global needs_delayed_init
+    needs_delayed_init = True
+
+
+@hook("WillowGame.WillowGFxMenuFrontend:OnClose", immediately_enable=True)
+@hook("WillowGame.WillowGFxMenu:initGenericMenu")
+def cancel_delayed_init(*_: Any) -> None:
+    global needs_delayed_init
+    needs_delayed_init = False
+
 
 def open_new_generic_menu(menu: WillowGFxMenu) -> None:
     """
@@ -78,13 +96,37 @@ def open_new_generic_menu(menu: WillowGFxMenu) -> None:
 
     text = unrealsdk.construct_object("WillowGFxMenuScreenGeneric", outer=menu)
     text.MenuTag = CUSTOM_OPTIONS_MENU_TAG
+
+    original_needs_delayed_init = needs_delayed_init
+    if original_needs_delayed_init:
+        text.InitFunc = "extInitOptions_Game"
+        delayed_mod_init.enable()
+
+    # This call will clear the init flag if it's set, hence saving the original value earlier
     text.Init(menu, 0)
 
     menu.ScreenStack.append(text)
     menu.ActivateTopPage(0)
     menu.PlayUISound("Confirm")
 
-    draw_custom_menu(menu)
+    if not original_needs_delayed_init:
+        # Can draw immediately
+        draw_custom_menu(menu)
+
+
+@hook("WillowGame.WillowGFxMenu:extInitOptions_Game")
+def delayed_mod_init(
+    obj: UObject,
+    _args: WrappedStruct,
+    _ret: Any,
+    _func: BoundFunction,
+) -> type[Block]:
+    delayed_mod_init.disable()
+
+    obj.ScreenStack[-1].InitFunc = ""
+    draw_custom_menu(obj)
+
+    return Block
 
 
 def draw_custom_menu(menu: WillowGFxMenu) -> None:
@@ -176,11 +218,14 @@ def generic_screen_deactivate(
             # If we have screens left, we can't immediately redraw them here, need to wait a little
             reactivate_upper_screen.enable()
 
+        elif (owner := obj.MenuOwner).Class.Name == "WillowGFxMenuFrontend":
+            # We had screens, but don't anymore, and came from the frontend menu
+            # Re-draw the lobby mods screen so we back out into it
+            open_lobby_mods_menu(owner)
+
+    # If we closed the last screen, can remove our hook
     if not populator_stack:
         play_sound.disable()
-
-        if (owner := obj.MenuOwner).Class.Name == "WillowGFxMenuFrontend":
-            open_lobby_mods_menu(owner)
 
 
 @hook("WillowGame.WillowGFxMenu:ActivateTopPage", hook_type=Type.POST)
