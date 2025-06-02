@@ -79,7 +79,7 @@ from .populators.mod_options import ModOptionPopulator  # noqa: E402
 from .populators.options import OptionPopulator  # noqa: E402
 
 # Weirdly, we need to perform a delayed init once, the very first time you open a generic menu
-# screen after starting the frontend. On subsequent calls we can initalize immediately, and we can
+# screen after starting the frontend. On subsequent calls we can initialize immediately, and we can
 # always do so from the pause menu. This tracks that.
 needs_delayed_init = False
 
