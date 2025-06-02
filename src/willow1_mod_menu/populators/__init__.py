@@ -6,11 +6,20 @@ from dataclasses import dataclass, field
 from unrealsdk import logging
 from unrealsdk.unreal import UObject
 
-from mods_base import BaseOption, BoolOption, DropdownOption, SliderOption, SpinnerOption
+from mods_base import (
+    BaseOption,
+    BoolOption,
+    DropdownOption,
+    KeybindOption,
+    SliderOption,
+    SpinnerOption,
+)
 from willow1_mod_menu.util import WillowGFxMenu, find_focused_item
 
 type WillowGFxLobbyTools = UObject
+type WillowGFxMenuScreenFrameKeyBinds = UObject
 
+LOCKED_KEY_PREFIX = "!LOCKED!"
 
 RE_INVALID_SPINNER_CHARS = re.compile("[:,]")
 
@@ -23,11 +32,16 @@ class Populator(ABC):
         repr=False,
         default_factory=list[BaseOption],
     )
+    drawn_keybinds: list[KeybindOption | None] = field(
+        init=False,
+        repr=False,
+        default_factory=list[KeybindOption | None],
+    )
 
     @abstractmethod
     def populate(self, tools: WillowGFxLobbyTools) -> None:
         """
-        Populates the menu with the appropriate contents.
+        Populates the menu with the appropriate options.
 
         Args:
             tools: The lobby tools which may be used to add to the menu.
@@ -43,6 +57,20 @@ class Populator(ABC):
             menu: The currently open menu.
             option: The option which was activate.
         """
+        raise NotImplementedError
+
+    def populate_keybinds(self, kb_frame: WillowGFxMenuScreenFrameKeyBinds) -> None:
+        """
+        Populates the menu with the appropriate keybinds.
+
+        Args:
+            kb_frame: The keybinds frame object which may be used to add binds.
+        """
+        raise NotImplementedError
+
+    def handle_reset_keybinds(self) -> None:
+        """Handles the reset keybind menu being activated."""
+        raise NotImplementedError
 
     # ==============================================================================================
 
@@ -190,3 +218,92 @@ class Populator(ABC):
                     f"Option '{option.identifier}' of unknown type {type(option)} unexpectedly got"
                     f" a slider/spinner change event",
                 )
+
+    def draw_keybind(
+        self,
+        kb_frame: WillowGFxMenuScreenFrameKeyBinds,
+        name: str,
+        key: str | None = None,
+        is_rebindable: bool = True,
+        option: KeybindOption | None = None,
+    ) -> None:
+        """
+        Adds an individual keybind to the menu.
+
+        Args:
+            kb_frame: The keybinds frame object to add to.
+            name: The name of the bind.
+            key: The key the bind is bound to.
+            is_rebindable: True if the key is rebindable.
+            option: The option to use during the callback, or None.
+        """
+        kb_frame.ActiveItems.emplace_struct(Caption=name)
+
+        key_list: list[str]
+        if key is None:
+            key_list = [] if is_rebindable else [LOCKED_KEY_PREFIX]
+        else:
+            key_list = [key] if is_rebindable else [LOCKED_KEY_PREFIX + key]
+
+        kb_frame.Keybinds.emplace_struct(Keys=key_list)
+
+        self.drawn_keybinds.append(option)
+
+    def may_bind_key(self, idx: int) -> bool:
+        """
+        Checks if we're allowed to bind the given key.
+
+        Args:
+            idx: The index of the key to check.
+        Returns:
+            True if we're allowed to bind this key index.
+        """
+        try:
+            option = self.drawn_keybinds[idx]
+        except IndexError:
+            return False
+
+        if option is None:
+            return False
+
+        return option.is_rebindable
+
+    def on_bind_key(self, kb_frame: WillowGFxMenuScreenFrameKeyBinds, idx: int, key: str) -> None:
+        """
+        Handles a raw key bind event.
+
+        Args:
+            kb_frame: The keybinds frame object to update with the new key.
+            idx: The index of the key which was bound.
+            key: The new value the key was requested to be set to.
+        """
+        try:
+            option = self.drawn_keybinds[idx]
+        except IndexError:
+            return
+        if option is None or not option.is_rebindable:
+            return
+
+        if key == option.value:
+            option.value = None
+        else:
+            option.value = key
+
+        kb_frame.Keybinds[idx].Keys = [] if option.value is None else [option.value]
+
+    def on_reset_keybinds(self, kb_frame: WillowGFxMenuScreenFrameKeyBinds) -> None:
+        """
+        Handles a raw reset keybinds event.
+
+        Args:
+            kb_frame: The keybinds frame object to update with the new key.
+        """
+        self.handle_reset_keybinds()
+
+        keybinds = kb_frame.Keybinds
+        for idx, option in enumerate(self.drawn_keybinds):
+            if option is None:
+                continue
+            keybinds[idx].Keys = [] if option.value is None else [option.value]
+
+        kb_frame.ApplyPageContent()

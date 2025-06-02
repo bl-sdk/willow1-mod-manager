@@ -18,6 +18,8 @@ if TYPE_CHECKING:
     from .util import WillowGFxMenu
 
 CUSTOM_OPTIONS_MENU_TAG = "willow1-mod-menu:custom-option"
+CUSTOM_KEYBINDS_MENU_TAG = "willow1-mod-menu:custom-keybinds"
+
 RE_SELECTED_IDX = re.compile(r"^_level\d+\.(menu\.selections|content)\.mMenu\.mList\.item(\d+)$")
 
 populator_stack: list[Populator] = []
@@ -58,9 +60,20 @@ def create_nested_options_menu(menu: WillowGFxMenu, option: NestedOption) -> Non
     open_new_generic_menu(menu)
 
 
+def create_keybinds_menu(menu: WillowGFxMenu) -> None:
+    """
+    Creates a new menu holding a mod's keybinds.
+
+    Args:
+        menu: The current menu to create the new one under.
+    """
+    create_keybinds_menu_impl(menu)
+
+
 # ==================================================================================================
 
 # Avoid circular imports
+from .populators import LOCKED_KEY_PREFIX  # noqa: E402
 from .populators.mod_list import ModListPopulator  # noqa: E402
 from .populators.mod_options import ModOptionPopulator  # noqa: E402
 from .populators.options import OptionPopulator  # noqa: E402
@@ -240,15 +253,21 @@ def reactivate_upper_screen(
 
 
 # ==================================================================================================
-# experimental
 
 
-def create_keybinds_menu(obj: WillowGFxMenu) -> None:
+def create_keybinds_menu_impl(obj: WillowGFxMenu) -> None:
     keybinds_frame = unrealsdk.construct_object("WillowGFxMenuScreenFrameKeyBinds", outer=obj)
+    keybinds_frame.MenuTag = CUSTOM_KEYBINDS_MENU_TAG
     keybinds_frame.FrameTag = "PCBindings"
-    keybinds_frame.MenuTag = "PCBindings"
-    keybinds_frame.CaptionMarkup = "My Mod"
+    keybinds_frame.CaptionMarkup = "Keybinds"
     keybinds_frame.Tip = "<Strings:WillowMenu.TitleMenu.SelBackBar>"
+
+    init_keybinds_frame.enable()
+    init_bind_list.enable()
+    bind_keybind_start.enable()
+    bind_keybind_finish.enable()
+    reset_keybinds.enable()
+    localize_key_name.enable()
 
     keybinds_frame.Init(obj, 0)
 
@@ -264,28 +283,111 @@ def init_keybinds_frame(
     _ret: Any,
     func: BoundFunction,
 ) -> type[Block]:
+    init_keybinds_frame.disable()
+
     super_class = obj.Class.SuperField
     assert super_class is not None
     super_func = super_class._find(func.func.Name)
     assert isinstance(super_func, UFunction)
     BoundFunction(super_func, obj)(args.Frame)
 
-    obj.ActiveItems.emplace_struct(
-        Tag="action_mod_kb_0",
-        Caption="kb caption",
-        CaptionMarkup="kb markup",
-    )
-    obj.Keybinds.emplace_struct(Bind="kb bind", Keys=["P"])
-    obj.Keybinds[-1].Keys.append("T")
+    active_items = obj.ActiveItems
+    keybinds = obj.Keybinds
 
-    obj.ActiveItems.emplace_struct(
-        Tag="action_mod_option_0",
-        Caption="opt caption",
-        CaptionMarkup="opt markup",
-    )
-    obj.Keybinds.emplace_struct()
+    active_items.clear()
+    keybinds.clear()
+
+    populator_stack[-1].populate_keybinds(obj)
 
     return Block
 
 
-init_keybinds_frame.disable()
+# This function deletes the existing keys from the list, so we just block it to keep them
+@hook("WillowGame.WillowGFxMenuScreenFrameKeyBinds:InitBind")
+def init_bind_list(*_: Any) -> type[Block]:
+    return Block
+
+
+@hook("WillowGame.WillowGFxMenuScreenFrameKeyBinds:DoBind")
+def bind_keybind_start(
+    obj: UObject,
+    _args: WrappedStruct,
+    _ret: Any,
+    _func: BoundFunction,
+) -> type[Block] | None:
+    if (idx := obj.Selection.Current) == 0:
+        # Reset keybinds, always allowed, continue
+        return None
+
+    if populator_stack[-1].may_bind_key(idx):
+        # Allowed to bind, continue
+        return None
+
+    # Not allowed, block it
+    return Block
+
+
+@hook("WillowGame.WillowGFxMenuScreenFrameKeyBinds:Bind")
+def bind_keybind_finish(
+    obj: UObject,
+    args: WrappedStruct,
+    _ret: Any,
+    _func: BoundFunction,
+) -> type[Block]:
+    populator_stack[-1].on_bind_key(obj, obj.Selection.Current, args.Key)
+    return Block
+
+
+@hook("WillowGame.WillowGFxMenuScreenFrameKeyBinds:ResetBindings_Clicked")
+def reset_keybinds(
+    obj: UObject,
+    args: WrappedStruct,
+    _ret: Any,
+    _func: BoundFunction,
+) -> type[Block]:
+    if args.Dlg.DialogResult != "Yes":
+        return Block
+
+    populator_stack[-1].on_reset_keybinds(obj)
+    return Block
+
+
+@hook("WillowGame.WillowGFxMenuScreenFrameKeyBinds:LocalizeKeyName")
+def localize_key_name(
+    _obj: UObject,
+    args: WrappedStruct,
+    _ret: Any,
+    func: BoundFunction,
+) -> tuple[type[Block], str] | None:
+    key: str = args.Key
+
+    if not key.startswith(LOCKED_KEY_PREFIX):
+        # Normal, non locked key, use the standard function
+        return None
+
+    without_prefix = key.removeprefix(LOCKED_KEY_PREFIX)
+    if not without_prefix:
+        # Locked key bound to nothing
+        return Block, "[ -- ]"
+
+    # Locked key bound to something
+    with unrealsdk.hooks.prevent_hooking_direct_calls():
+        localized = func(without_prefix)
+    return Block, f"[ {localized} ]"
+
+
+@hook("WillowGame.WillowGFxMenuScreenFrameKeyBinds:Screen_Deactivate", immediately_enable=True)
+def keybind_screen_deactivate(
+    obj: UObject,
+    _args: WrappedStruct,
+    _ret: Any,
+    _func: BoundFunction,
+) -> None:
+    if obj.MenuTag == CUSTOM_KEYBINDS_MENU_TAG and populator_stack:
+        init_bind_list.disable()
+        bind_keybind_start.disable()
+        bind_keybind_finish.disable()
+        reset_keybinds.disable()
+        localize_key_name.disable()
+
+        reactivate_upper_screen.enable()
