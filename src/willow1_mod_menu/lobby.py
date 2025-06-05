@@ -1,12 +1,21 @@
 # ruff: noqa: D103
 import re
+import traceback
 from typing import Any
 
 import unrealsdk
 from unrealsdk.hooks import Block
 from unrealsdk.unreal import BoundFunction, UObject, WeakPointer, WrappedStruct
 
-from mods_base import CoopSupport, Game, Mod, get_ordered_mod_list, hook, html_to_plain_text
+from mods_base import (
+    CoopSupport,
+    EInputEvent,
+    Game,
+    Mod,
+    get_ordered_mod_list,
+    hook,
+    html_to_plain_text,
+)
 from mods_base.mod_list import base_mod
 
 from .util import find_focused_item
@@ -36,6 +45,7 @@ def open_lobby_mods_menu(frontend: WillowGFxMenuFrontend) -> None:
     init_content.enable()
     play_sound.enable()
     menu_close.enable()
+    handle_input_key.enable()
 
     frontend.OpenMP()
 
@@ -54,6 +64,23 @@ def block_search_delegate(
     _func: BoundFunction,
 ) -> type[Block]:
     return Block
+
+
+def get_mod_title(mod: Mod) -> str:
+    """
+    Combines the mod name and status into a single title.
+
+    Args:
+        mod: The mod to ge tthe title of.
+    Returns:
+        The title to use for the mod in this menu.
+    """
+    # Filter out the standard enabled statuses, for more variation in the list - it's harder
+    # to tell what's enabled or not when every single entry has a suffix
+    # If there's a custom status, we'll still show that
+    status = html_to_plain_text(mod.get_status()).strip()
+    suffix = "" if mod.is_enabled and status in ("Enabled", "Loaded") else f" ({status})"
+    return html_to_plain_text(mod.name) + suffix
 
 
 # This hook is when the menu is actually initialized - we overwrite it with all our own logic
@@ -76,17 +103,11 @@ def init_content(
 
     drawn_mods.clear()
     for mod in get_ordered_mod_list():
-        # Filter out the standard enabled statuses, for more variation in the list - it's harder
-        # to tell what's enabled or not when every single entry has a suffix
-        # If there's a custom status, we'll still show that
-        status = html_to_plain_text(mod.get_status()).strip()
-        suffix = "" if mod.is_enabled and status in ("Enabled", "Loaded") else f" ({status})"
-
         # This function has extra options for other commands, and a lot of base game calls pass
         # something like `menuAddItem(0, "title", "tag", "extHostP", "Focus:extMenuFocus")`
         # Unfortunately for us, it seems passing anything after the title also results in corruption
         # This gives us a rough time later on actually detecting select/focus
-        obj.menuAddItem(0, html_to_plain_text(mod.name) + suffix)
+        obj.menuAddItem(0, get_mod_title(mod))
         drawn_mods.append(mod)
 
     obj.menuEnd()
@@ -152,7 +173,7 @@ def update_menu_for_mod(menu: WillowGFxLobbyMultiplayer, mod: Mod) -> None:
 
     tooltip = "$<StringAliasMap:GFx_Accept> DETAILS"
     if not mod.enabling_locked:
-        tooltip += "     [Space] " + "DISABLE" if mod.is_enabled else "ENABLE"
+        tooltip += "     [Space] " + ("DISABLE" if mod.is_enabled else "ENABLE")
     tooltip += "     <Strings:WillowMenu.TitleMenu.BackBar>"
 
     menu.SetVariableString("lobby.tooltips.text", tooltip)
@@ -216,6 +237,39 @@ def select_next_tick(*_: Any) -> None:
         update_menu_for_mod(menu, mod)
 
 
+@hook("WillowGame.WillowGFxLobbyMultiplayer:HandleInputKey")
+def handle_input_key(
+    obj: UObject,
+    args: WrappedStruct,
+    _ret: Any,
+    _func: BoundFunction,
+) -> tuple[type[Block], bool] | None:
+    key: str = args.ukey
+    event: EInputEvent = args.uevent
+
+    if not (key == "SpaceBar" and event == EInputEvent.IE_Released):
+        return None
+
+    mod = get_focused_mod(obj)
+    if mod is None or mod.enabling_locked:
+        return None
+
+    old_enabled = mod.is_enabled
+    try:
+        (mod.disable if old_enabled else mod.enable)()
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+
+    # Extra safety layer in case the mod rejected the toggle, no need to update if we haven't
+    # changed state
+    if old_enabled != mod.is_enabled:
+        update_menu_for_mod(obj, mod)
+
+        obj.SetVariableString(find_focused_item(obj) + ".mLabel.text", get_mod_title(mod))
+
+    return Block, True
+
+
 @hook("WillowGame.WillowGFxLobbyMultiplayer:OnClose")
 def menu_close(
     _obj: UObject,
@@ -229,6 +283,7 @@ def menu_close(
     play_sound.disable()
     select_next_tick.disable()
     menu_close.disable()
+    handle_input_key.disable()
 
     global current_menu
     current_menu = WeakPointer()
