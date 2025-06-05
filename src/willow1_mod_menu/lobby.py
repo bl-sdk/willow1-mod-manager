@@ -71,7 +71,7 @@ def get_mod_title(mod: Mod) -> str:
     Combines the mod name and status into a single title.
 
     Args:
-        mod: The mod to ge tthe title of.
+        mod: The mod to get the title of.
     Returns:
         The title to use for the mod in this menu.
     """
