@@ -1,12 +1,14 @@
 # ruff: noqa: D103
 from __future__ import annotations
 
+import math
 import re
 from typing import TYPE_CHECKING, Any
 
 import unrealsdk
+from unrealsdk import logging
 from unrealsdk.hooks import Block, Type
-from unrealsdk.unreal import BoundFunction, UFunction, UObject, WrappedStruct
+from unrealsdk.unreal import BoundFunction, UFunction, UObject, WeakPointer, WrappedStruct
 
 from mods_base import Mod, NestedOption, hook, html_to_plain_text
 
@@ -189,6 +191,9 @@ def get_selected_idx(menu: WillowGFxMenu) -> int | None:
         return None
 
 
+slider_spinner_next_tick_info: tuple[WeakPointer, str, Populator, int] | None = None
+
+
 # Similarly to the lobby menu, we need to use sounds to detect when you click an option/adjust a
 # slider, since we can't safely pass callback names to ActionScript
 @hook("GearboxFramework.GearboxGFxMovie:PlaySpecialUISound")
@@ -210,9 +215,44 @@ def play_sound(
 
     if args.SoundString == "Confirm":
         populator.on_activate(obj, idx)
+        return
+
+    # Sliders have the same problem as in the lobby movie, for kb input they plays the sound after
+    # updating the value, and we could run our callbacks here, but for mouse input they play the
+    # sound before. Wait for next tick before updating.
+
+    # Save a bunch of data we already have
+    global slider_spinner_next_tick_info
+    slider_spinner_next_tick_info = (
+        WeakPointer(obj),
+        find_focused_item(obj) + ".mValue",
+        populator,
+        idx,
+    )
+
+    slider_spinner_next_tick.enable()
+
+
+@hook("WillowGame.WillowUIInteraction:TickImp")
+def slider_spinner_next_tick(*_: Any) -> None:
+    slider_spinner_next_tick.disable()
+
+    global slider_spinner_next_tick_info
+    if slider_spinner_next_tick_info is None:
+        return
+    weak_menu, path, populator, idx = slider_spinner_next_tick_info
+    slider_spinner_next_tick_info = None
+
+    if (menu := weak_menu()) is None:
+        return
+    value = menu.GetVariableNumber(path)
+
+    if math.isnan(value):
+        # We really don't want to set an option's value to NaN since it becomes essentially
+        # unrecoverable without manually editing settings
+        logging.error("Got NaN after changing spinner/slide!")
     else:
-        value = obj.GetVariableNumber(find_focused_item(obj) + ".Value")
-        populator.on_slider_spinner_change(obj, idx, value)
+        populator.on_slider_spinner_change(menu, idx, value)
 
 
 @hook("WillowGame.WillowGFxMenuScreenGeneric:Screen_Deactivate", immediately_enable=True)
