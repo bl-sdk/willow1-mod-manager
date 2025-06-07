@@ -11,6 +11,8 @@ from io import BytesIO
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from pick_release_name import pick_release_name
+
 THIS_FOLDER = Path(__file__).parent
 
 # The various locations we extract to within the zip file
@@ -236,6 +238,8 @@ def zip_config_file(zip_file: ZipFile) -> None:
     git_version = get_git_repo_version()
     display_version = f"{version_number} ({git_version})"
 
+    release_name = pick_release_name(get_git_commit_hash())
+
     # Tomllib doesn't support dumping yet, so we have to create it as a string
     # Using `json.dumps` to escape strings, since it should be mostly compatible
     config = (
@@ -248,6 +252,9 @@ def zip_config_file(zip_file: ZipFile) -> None:
         f"\n"
         f"[mod_manager]\n"
         f"display_version = {json.dumps(display_version)}\n"
+        f"\n"
+        f"[willow1_mod_menu]\n"
+        f"display_version = {json.dumps(release_name)}\n"
     )
 
     zip_file.writestr(str(ZIP_PLUGINS_FOLDER / "unrealsdk.toml"), config)
