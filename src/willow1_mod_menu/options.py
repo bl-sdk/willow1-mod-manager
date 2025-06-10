@@ -191,7 +191,7 @@ def get_selected_idx(menu: WillowGFxMenu) -> int | None:
         return None
 
 
-slider_spinner_next_tick_info: tuple[WeakPointer, str, Populator, int] | None = None
+slider_next_tick_info: tuple[WeakPointer, str, Populator, int] | None = None
 
 
 # Similarly to the lobby menu, we need to use sounds to detect when you click an option/adjust a
@@ -217,42 +217,52 @@ def play_sound(
         populator.on_activate(obj, idx)
         return
 
+    # The same sound is used for both sliders and spinners.
+    # This variable is only defined on spinners, so should be NaN if we've selected a slider.
+    choice: float = obj.GetVariableNumber((focused := find_focused_item(obj)) + ".mChoice")
+    if math.isfinite(choice):
+        # It's a spinner
+        populator.on_spinner_change(obj, idx, int(choice))
+        return
+
+    # It's a slider.
     # Sliders have the same problem as in the lobby movie, for kb input they plays the sound after
     # updating the value, and we could run our callbacks here, but for mouse input they play the
-    # sound before. Wait for next tick before updating.
+    # sound before.
+    # Save a bunch of data we already have, then wait for next tick.
 
-    # Save a bunch of data we already have
-    global slider_spinner_next_tick_info
-    slider_spinner_next_tick_info = (
+    global slider_next_tick_info
+    slider_next_tick_info = (
         WeakPointer(obj),
-        find_focused_item(obj) + ".mValue",
+        focused + ".mValue",
         populator,
         idx,
     )
 
-    slider_spinner_next_tick.enable()
+    slider_next_tick.enable()
 
 
 @hook("WillowGame.WillowUIInteraction:TickImp")
-def slider_spinner_next_tick(*_: Any) -> None:
-    slider_spinner_next_tick.disable()
+def slider_next_tick(*_: Any) -> None:
+    slider_next_tick.disable()
 
-    global slider_spinner_next_tick_info
-    if slider_spinner_next_tick_info is None:
+    global slider_next_tick_info
+    if slider_next_tick_info is None:
         return
-    weak_menu, path, populator, idx = slider_spinner_next_tick_info
-    slider_spinner_next_tick_info = None
+    weak_menu, path, populator, idx = slider_next_tick_info
+    slider_next_tick_info = None
 
     if (menu := weak_menu()) is None:
         return
     value = menu.GetVariableNumber(path)
 
-    if math.isnan(value):
-        # We really don't want to set an option's value to NaN since it becomes essentially
-        # unrecoverable without manually editing settings
-        logging.error("Got NaN after changing spinner/slide!")
+    if not math.isfinite(value):
+        # If something's become invalid, we'll have gotten a NaN back. We really don't want to set
+        # an option's value to NaN or inf, since it becomes essentially unrecoverable without
+        # manually editing settings
+        logging.error(f"Got {value} after changing spinner/slider!")
     else:
-        populator.on_slider_spinner_change(menu, idx, value)
+        populator.on_slider_change(menu, idx, value)
 
 
 @hook("WillowGame.WillowGFxMenuScreenGeneric:Screen_Deactivate", immediately_enable=True)

@@ -182,14 +182,14 @@ class Populator(ABC):
 
         self.handle_activate(menu, option)
 
-    def on_slider_spinner_change(self, menu: WillowGFxMenu, idx: int, value: float) -> None:
+    def on_spinner_change(self, menu: WillowGFxMenu, idx: int, choice_idx: int) -> None:
         """
-        Handles a raw slider or spinner change event.
+        Handles a raw spinner change.
 
         Args:
             menu: The currently open menu.
             idx: The index of the item which was activated.
-            value: The option's new value.
+            choice_idx: The newly selected choice's index.
         """
         _ = menu
         try:
@@ -200,24 +200,47 @@ class Populator(ABC):
 
         match option:
             case BoolOption():
-                option.value = bool(value)
+                option.value = bool(choice_idx)
             case DropdownOption() | SpinnerOption():
-                option.value = option.choices[int(value)]
-            case SliderOption():
-                if option.is_integer:
-                    value = round(value)
-                option.value = value
-
-                menu.SetVariableString(
-                    find_focused_item(menu) + ".mLabel.text",
-                    self.format_slider_label(option),
-                )
-
+                option.value = option.choices[choice_idx]
             case _:
                 logging.error(
-                    f"Option '{option.identifier}' of unknown type {type(option)} unexpectedly got"
-                    f" a slider/spinner change event",
+                    f"Option '{option.identifier}' got a spinner change event despite not being a"
+                    " spinner",
                 )
+
+    def on_slider_change(self, menu: WillowGFxMenu, idx: int, value: float) -> None:
+        """
+        Handles a raw slider change.
+
+        Args:
+            menu: The currently open menu.
+            idx: The index of the item which was activated.
+            value: The new value of the slider.
+        """
+        _ = menu
+        try:
+            option = self.drawn_options[idx]
+        except IndexError:
+            logging.error(f"Can't find option which was changed at index {idx}")
+            return
+
+        if not isinstance(option, SliderOption):
+            logging.error(
+                f"Option '{option.identifier}' got a spinner change event despite not being a"
+                " spinner",
+            )
+            return
+
+        if option.is_integer:
+            value = round(value)
+
+        option.value = value
+
+        menu.SetVariableString(
+            find_focused_item(menu) + ".mLabel.text",
+            self.format_slider_label(option),
+        )
 
     def draw_keybind(
         self,
