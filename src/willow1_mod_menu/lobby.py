@@ -1,10 +1,11 @@
 # ruff: noqa: D103
+import math
 import re
 import traceback
 from typing import Any
 
 import unrealsdk
-from unrealsdk.hooks import Block
+from unrealsdk.hooks import Block, Type
 from unrealsdk.unreal import BoundFunction, UObject, WeakPointer, WrappedStruct
 
 from mods_base import (
@@ -44,8 +45,9 @@ def open_lobby_mods_menu(frontend: WillowGFxMenuFrontend) -> None:
     block_search_delegate.enable()
     init_content.enable()
     play_sound.enable()
-    menu_close.enable()
     handle_input_key.enable()
+    menu_scroll.enable()
+    menu_close.enable()
 
     frontend.OpenMP()
 
@@ -131,6 +133,7 @@ def init_next_tick(*_: Any) -> None:
 
     menu.SetVariableString("lobby.tab.text", "SDK Mod Manager")
     menu.SetVariableString("lobby.optionsHeader.text", "Mods")
+    menu.SetVariableNumber("mMenu.mList._y", 0)
 
     # Most of the mod details could be updated in the initial hook, but there's a few parts which
     # need to be here
@@ -270,6 +273,39 @@ def handle_input_key(
     return Block, True
 
 
+@hook("WillowGame.WillowGFxLobbyBase:inNext", hook_type=Type.POST)
+@hook("WillowGame.WillowGFxLobbyBase:inPrev", hook_type=Type.POST)
+def menu_scroll(
+    obj: UObject,
+    _args: WrappedStruct,
+    _ret: Any,
+    _func: BoundFunction,
+) -> None:
+    # If we have more than a page of menu items (14), the scrolling slightly breaks, and the top
+    # item gets displayed off screen. This is probably a vanilla bug.
+    # Note this hook is not suitable for focus change, since it's not triggered on mouse movement.
+
+    if not math.isfinite(list_y := obj.GetVariableNumber("mMenu.mList._y")):
+        return
+    if list_y >= 0:
+        # Already scrolled to the top, no need to do anything
+        return
+
+    if get_focused_mod(obj) == drawn_mods[0]:
+        # Special case: if we just scrolled to index 0 always scroll back to the top
+        obj.SetVariableNumber("mMenu.mList._y", 0)
+        return
+
+    # You can still scroll off the top, as long as you're not selecting the very top item.
+
+    # Unfortunately, this seems non-trivial to fix.
+    # For one, there isn't really a good way to detect if the focused item is off screen.
+    # Then even if we come up with a heuristic, changing Y while not at the top has some weird
+    # effects, it'll bring the header back and leave us with some empty menu items.
+
+    # Leaving it for now. You can always just scroll up an extra time.
+
+
 @hook("WillowGame.WillowGFxLobbyMultiplayer:OnClose")
 def menu_close(
     _obj: UObject,
@@ -282,8 +318,9 @@ def menu_close(
     init_next_tick.disable()
     play_sound.disable()
     select_next_tick.disable()
-    menu_close.disable()
     handle_input_key.disable()
+    menu_scroll.disable()
+    menu_close.disable()
 
     global current_menu
     current_menu = WeakPointer()
