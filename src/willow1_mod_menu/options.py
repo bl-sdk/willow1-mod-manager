@@ -122,7 +122,6 @@ def open_new_generic_menu(menu: WillowGFxMenu) -> None:
 
     menu.ScreenStack.append(text)
     menu.ActivateTopPage(0)
-    menu.PlayUISound("Confirm")
 
     if not original_needs_delayed_init:
         # Can draw immediately
