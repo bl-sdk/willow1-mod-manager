@@ -166,6 +166,20 @@ class Populator(ABC):
         )
         self.drawn_options.append(option)
 
+    def is_spinner(self, idx: int) -> bool:
+        """
+        Checks if the option drawn at a given index is a spinner.
+
+        Args:
+            idx: The index to check.
+        Returns:
+            True if the option is a spinner.
+        """
+        try:
+            return isinstance(self.drawn_options[idx], SliderOption)
+        except IndexError:
+            return False
+
     def on_activate(self, menu: WillowGFxMenu, idx: int) -> None:
         """
         Handles a raw menu item activation.

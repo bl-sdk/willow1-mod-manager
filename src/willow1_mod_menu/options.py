@@ -217,14 +217,13 @@ def play_sound(
         return
 
     # The same sound is used for both sliders and spinners.
-    # This variable is only defined on spinners, so should be NaN if we've selected a slider.
-    choice: float = obj.GetVariableNumber((focused := find_focused_item(obj)) + ".mChoice")
-    if math.isfinite(choice):
-        # It's a spinner
+    focused = find_focused_item(obj)
+    if populator.is_spinner(idx):
+        # We can do spinners more easily first
+        choice: float = obj.GetVariableNumber(focused + ".mChoice")
         populator.on_spinner_change(obj, idx, int(choice))
         return
 
-    # It's a slider.
     # Sliders have the same problem as in the lobby movie, for kb input they plays the sound after
     # updating the value, and we could run our callbacks here, but for mouse input they play the
     # sound before.
@@ -259,7 +258,7 @@ def slider_next_tick(*_: Any) -> None:
         # If something's become invalid, we'll have gotten a NaN back. We really don't want to set
         # an option's value to NaN or inf, since it becomes essentially unrecoverable without
         # manually editing settings
-        logging.error(f"Got {value} after changing spinner/slider!")
+        logging.error(f"Got {value} after changing slider!")
     else:
         populator.on_slider_change(menu, idx, value)
 
