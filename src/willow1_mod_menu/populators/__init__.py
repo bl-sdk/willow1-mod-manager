@@ -176,7 +176,7 @@ class Populator(ABC):
             True if the option is a spinner.
         """
         try:
-            return isinstance(self.drawn_options[idx], SliderOption)
+            return isinstance(self.drawn_options[idx], SpinnerOption)
         except IndexError:
             return False
 
