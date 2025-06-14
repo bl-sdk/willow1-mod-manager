@@ -169,7 +169,9 @@ UNIQUE_ITEM_NAMES = [
     "Wildcat",
 ]
 
-PREVIOUS_RELEASE_NAMES = []
+PREVIOUS_RELEASE_NAMES = [
+    "Support Gunner",
+]
 
 
 @cache
