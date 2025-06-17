@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.1 (Upcoming)
+## v2.1: Orion
 ### Willow1 Mod Menu v1.1
 - Fixed that Boolean and Slider options didn't properly detect changes.
 

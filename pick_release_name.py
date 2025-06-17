@@ -171,6 +171,7 @@ UNIQUE_ITEM_NAMES = [
 
 PREVIOUS_RELEASE_NAMES = [
     "Support Gunner",
+    "Orion",
 ]
 
 
