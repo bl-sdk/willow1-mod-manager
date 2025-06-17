@@ -218,7 +218,7 @@ def play_sound(
 
     # The same sound is used for both sliders and spinners.
     focused = find_focused_item(obj)
-    if populator.is_spinner(idx):
+    if not populator.is_slider(idx):
         # We can do spinners more easily first
         choice: float = obj.GetVariableNumber(focused + ".mChoice")
         populator.on_spinner_change(obj, idx, int(choice))
