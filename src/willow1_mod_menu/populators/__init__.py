@@ -166,17 +166,17 @@ class Populator(ABC):
         )
         self.drawn_options.append(option)
 
-    def is_spinner(self, idx: int) -> bool:
+    def is_slider(self, idx: int) -> bool:
         """
-        Checks if the option drawn at a given index is a spinner.
+        Checks if the option drawn at a given index is a slider.
 
         Args:
             idx: The index to check.
         Returns:
-            True if the option is a spinner.
+            True if the option is a slider.
         """
         try:
-            return isinstance(self.drawn_options[idx], SpinnerOption)
+            return isinstance(self.drawn_options[idx], SliderOption)
         except IndexError:
             return False
 
