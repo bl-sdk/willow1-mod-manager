@@ -8,6 +8,7 @@ import tomllib
 from collections.abc import Iterator
 from functools import cache
 from io import BytesIO
+from os import path
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -21,9 +22,6 @@ ZIP_STUBS_FOLDER = ZIP_MODS_FOLDER / ".stubs"
 ZIP_SETTINGS_FOLDER = ZIP_MODS_FOLDER / "settings"
 ZIP_EXECUTABLE_FOLDER = Path("Binaries")
 ZIP_PLUGINS_FOLDER = ZIP_EXECUTABLE_FOLDER / "Plugins"
-ZIP_PROXY_INIT_SCRIPT_FOLDERS = [
-    ZIP_EXECUTABLE_FOLDER / ZIP_MODS_FOLDER,
-]
 
 # The base CMake directories - these need the preset added after
 BUILD_DIR_BASE = THIS_FOLDER / "out" / "build"
@@ -40,7 +38,6 @@ VALID_MOD_FILE_SUFFIXES = {".py", ".pyi", ".pyd", ".md"}
 
 # And there are a few extra files which we want which aren't matched by the above
 INIT_SCRIPT = MODS_FOLDER / "__main__.py"
-PROXY_INIT_SCRIPT = MODS_FOLDER / "proxy__main__.py"
 SETTINGS_GITIGNORE = MODS_FOLDER / "settings" / ".gitignore"
 STUBS_DIR = THIS_FOLDER / "libs" / "pyunrealsdk" / "stubs"
 STUBS_LICENSE = THIS_FOLDER / "libs" / "pyunrealsdk" / "LICENSE"
@@ -222,17 +219,10 @@ def zip_config_file(zip_file: ZipFile) -> None:
     Args:
         zip_file: The zip file to add the config file to.
     """
-    # When launching via Steam, the CWD is (sometimes) `<steam>\Borderlands`. When launching via Mod
-    # Organiser, or by running the exe directly, it's `Borderlands\Binaries`.
-    # Stick with Steam as the default, since if we're not using Steam, the path this checks will
-    # still be inside the game folder.
-    init_script_path = str(ZIP_MODS_FOLDER / INIT_SCRIPT.name)
-    pyexec_root = str(ZIP_MODS_FOLDER)
-
-    # Copy the proxy script to all the spots the relative path might otherwise end up
-    for path in ZIP_PROXY_INIT_SCRIPT_FOLDERS:
-        zip_file.write(PROXY_INIT_SCRIPT, path / INIT_SCRIPT.name)
-        zip_file.writestr(str(path / "Wrong folder, you cannot place sdk mods here!.txt"), "")
+    # Path.relative_to doesn't work when where's no common base, need to use os.path
+    # These paths are relative to the plugins folder
+    init_script_path = path.relpath(ZIP_MODS_FOLDER / INIT_SCRIPT.name, ZIP_PLUGINS_FOLDER)
+    pyexec_root = path.relpath(ZIP_MODS_FOLDER, ZIP_PLUGINS_FOLDER)
 
     version_number = tomllib.loads(MANAGER_PYPROJECT.read_text())["project"]["version"]
     git_version = get_git_repo_version()
