@@ -417,7 +417,6 @@ def create_keybinds_menu_impl(obj: WillowGFxMenu) -> None:
 
     obj.ScreenStack.append(keybinds_frame)
     obj.ActivateTopPage(0)
-    obj.PlayUISound("Confirm")
 
 
 @hook("WillowGame.WillowGFxMenuScreenFrameKeyBinds:InitFrame")
