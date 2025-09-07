@@ -13,7 +13,7 @@ from unrealsdk.unreal import BoundFunction, UFunction, UObject, WeakPointer, Wra
 from mods_base import Mod, NestedOption, hook, html_to_plain_text
 
 from .lobby import open_lobby_mods_menu
-from .util import find_focused_item
+from .util import ASType, find_focused_item
 
 if TYPE_CHECKING:
     from .populators import Populator
@@ -22,9 +22,12 @@ if TYPE_CHECKING:
 CUSTOM_OPTIONS_MENU_TAG = "willow1-mod-menu:custom-option"
 CUSTOM_KEYBINDS_MENU_TAG = "willow1-mod-menu:custom-keybinds"
 
-RE_SELECTED_IDX = re.compile(r"^_level\d+\.(menu\.selections|content)\.mMenu\.mList\.item(\d+)$")
+RE_SELECTED_IDX = re.compile(
+    r"^(?P<list>_level\d+\.(?:menu\.selections|content)\.mMenu\.mList)\.item(?P<idx>\d+)$",
+)
 
 populator_stack: list[Populator] = []
+nested_selection_stack: list[tuple[str, float]] = []
 
 
 def create_mod_list_options_menu(menu: WillowGFxMenu) -> None:
@@ -47,6 +50,8 @@ def create_mod_options_menu(menu: WillowGFxMenu, mod: Mod) -> None:
         mod: The mod to create the options menu for.
     """
     populator_stack.append(ModOptionPopulator(mod.name, mod=mod))
+    if menu.Class.Name == "WillowGFxMenuPause":
+        push_nested_selection(menu)
     open_new_generic_menu(menu)
 
 
@@ -59,6 +64,7 @@ def create_nested_options_menu(menu: WillowGFxMenu, option: NestedOption) -> Non
         option: The options whose children to create a menu for.
     """
     populator_stack.append(OptionPopulator(option.display_name, option.children))
+    push_nested_selection(menu)
     open_new_generic_menu(menu)
 
 
@@ -69,10 +75,29 @@ def create_keybinds_menu(menu: WillowGFxMenu) -> None:
     Args:
         menu: The current menu to create the new one under.
     """
+    push_nested_selection(menu)
     create_keybinds_menu_impl(menu)
 
 
 # ==================================================================================================
+
+
+def push_nested_selection(menu: WillowGFxMenu) -> None:
+    """
+    Pushes the currently selected item to the stack, so it can be restored when this menu is closed.
+
+    Args:
+        menu: The current menu to retrieve the selected item from
+    """
+    item = find_focused_item(menu)
+    if (match := RE_SELECTED_IDX.match(item)) is None:
+        # Just default to 0
+        y = 0
+    else:
+        y = menu.GetVariableNumber(match.group("list") + "._y")
+
+    nested_selection_stack.append((item, y))
+
 
 # Avoid circular imports
 from .populators import LOCKED_KEY_PREFIX  # noqa: E402
@@ -185,7 +210,7 @@ def get_selected_idx(menu: WillowGFxMenu) -> int | None:
         return None
 
     try:
-        return int(match.group(2))
+        return int(match.group("idx"))
     except ValueError:
         return None
 
@@ -278,15 +303,58 @@ def generic_screen_deactivate(
         if populator_stack:
             # If we have screens left, we can't immediately redraw them here, need to wait a little
             reactivate_upper_screen.enable()
+        else:
+            # Sanity check: the selection stack should also be clear now
+            nested_selection_stack.clear()
 
-        elif (owner := obj.MenuOwner).Class.Name == "WillowGFxMenuFrontend":
-            # We had screens, but don't anymore, and came from the frontend menu
-            # Re-draw the lobby mods screen so we back out into it
-            open_lobby_mods_menu(owner)
+            if (owner := obj.MenuOwner).Class.Name == "WillowGFxMenuFrontend":
+                # We had screens, but don't anymore, and came from the frontend menu
+                # Re-draw the lobby mods screen so we back out into it
+                open_lobby_mods_menu(owner)
 
     # If we closed the last screen, can remove our hook
     if not populator_stack:
         play_sound.disable()
+
+
+# When you back out of a nested menu, we need to wait a few ticks before we can set your selection
+# back to what it was before
+reselect_nested_info: tuple[WeakPointer, str, int, float, float] | None = None
+
+
+@hook("GearboxFramework.GearboxGFxMovie:OnTick")
+def reselect_nested_next_tick(
+    obj: UObject,
+    _args: WrappedStruct,
+    _ret: Any,
+    _func: BoundFunction,
+) -> None:
+    global reselect_nested_info
+    if reselect_nested_info is None:
+        reselect_nested_next_tick.disable()
+        return
+
+    weak_menu, list_name, idx, y, original_tick_rate = reselect_nested_info
+    if (menu := weak_menu()) is None:
+        reselect_nested_next_tick.disable()
+        return
+
+    # Ignore ticks from other movies, and wait for this menu to start up enough to focus something
+    if obj != menu or not find_focused_item(menu):
+        return
+
+    reselect_nested_next_tick.disable()
+    reselect_nested_info = None
+
+    menu.SetVariableNumber(list_name + "._y", y)
+
+    invoke = menu.Invoke
+    invoke_args = WrappedStruct(invoke.func)
+    invoke_args.Method = list_name + ".setSelectedItem"
+    invoke_args.args.emplace_struct(Type=ASType.AS_Number, N=idx)
+    invoke(invoke_args)
+
+    menu.TickRateSeconds = original_tick_rate
 
 
 @hook("WillowGame.WillowGFxMenu:ActivateTopPage", hook_type=Type.POST)
@@ -298,6 +366,34 @@ def reactivate_upper_screen(
 ) -> None:
     reactivate_upper_screen.disable()
     draw_custom_menu(obj)
+
+    if nested_selection_stack:
+        item, y = nested_selection_stack.pop()
+        if not item:
+            # May happen if getting focus failed
+            return
+
+        match = RE_SELECTED_IDX.match(item)
+        if match is None:
+            return
+        try:
+            idx = int(match.group("idx"))
+        except ValueError:
+            return
+
+        global reselect_nested_info
+        reselect_nested_info = (
+            WeakPointer(obj),
+            match.group("list"),
+            idx,
+            y,
+            obj.TickRateSeconds,
+        )
+
+        # Default tickrate is very slow
+        obj.TickRateSeconds = 1 / 60
+
+        reselect_nested_next_tick.enable()
 
 
 # ==================================================================================================
@@ -321,7 +417,6 @@ def create_keybinds_menu_impl(obj: WillowGFxMenu) -> None:
 
     obj.ScreenStack.append(keybinds_frame)
     obj.ActivateTopPage(0)
-    obj.PlayUISound("Confirm")
 
 
 @hook("WillowGame.WillowGFxMenuScreenFrameKeyBinds:InitFrame")
