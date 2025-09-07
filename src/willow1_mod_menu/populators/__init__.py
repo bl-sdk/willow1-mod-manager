@@ -142,10 +142,10 @@ class Populator(ABC):
             The formatted label.
         """
         value = option.value
-        if option.is_integer or abs(option.step) > 1:
+        if option.is_integer:
             value = round(value)
 
-        return f"{option.display_name}: {value}"
+        return f"{option.display_name}: {value:g}"
 
     def draw_slider(
         self,
