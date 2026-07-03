@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.3 (Upcoming)
+## v2.3: Firehawk
 - Fixed that the release zip for classic put the pluginloader in the wrong location, meaning fresh
   installs would not load. Upgraded installs still worked, no functional changes.
 

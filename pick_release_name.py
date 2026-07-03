@@ -172,6 +172,7 @@ PREVIOUS_RELEASE_NAMES = [
     "Support Gunner",
     "Orion",
     "Warmonger",
+    "Firehawk",
 ]
 
 
